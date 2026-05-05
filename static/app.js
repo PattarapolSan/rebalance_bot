@@ -41,6 +41,36 @@ function showTab(name) {
   }
 }
 
+function switchPortfolioView(view) {
+  const isList = view === 'list';
+  document.getElementById("view-content-list").classList.toggle("hidden", !isList);
+  document.getElementById("view-content-charts").classList.toggle("hidden", isList);
+
+  // Toggle tab buttons
+  const listBtn = document.getElementById("view-tab-list");
+  const chartsBtn = document.getElementById("view-tab-charts");
+
+  if (isList) {
+    listBtn.classList.add("bg-white", "text-slate-900", "shadow-sm");
+    listBtn.classList.remove("text-slate-500");
+    chartsBtn.classList.remove("bg-white", "text-slate-900", "shadow-sm");
+    chartsBtn.classList.add("text-slate-500");
+  } else {
+    chartsBtn.classList.add("bg-white", "text-slate-900", "shadow-sm");
+    chartsBtn.classList.remove("text-slate-500");
+    listBtn.classList.remove("bg-white", "text-slate-900", "shadow-sm");
+    listBtn.classList.add("text-slate-500");
+
+    // Refresh charts when switching to charts view
+    if (currentPortfolio.length > 0) {
+      setTimeout(() => {
+        updateAllocationChart(currentPortfolio);
+        updatePerformanceChart(currentPortfolio);
+      }, 0);
+    }
+  }
+}
+
 // ── Mobile Sidebar ──────────────────────────────────────────────────────────
 
 function toggleSidebar(force) {
@@ -101,6 +131,7 @@ async function loadPortfolio() {
   tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-10 text-center"><div class="skeleton h-4 rounded w-64 mx-auto"></div></td></tr>`;
   try {
     const positions = await api("GET", "/portfolio");
+    currentPortfolio = positions;
     renderPortfolio(positions);
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-10 text-center text-red-400 text-sm">${e.message}</td></tr>`;
@@ -157,12 +188,64 @@ function renderPortfolio(positions) {
   // Render Mobile List
   renderMobileList(validPositions, mobileList);
 
-  // Update Chart - Wrap in try-catch to prevent breaking list rendering
+  // Update Charts - Wrap in try-catch to prevent breaking list rendering
   try {
     updateAllocationChart(validPositions);
+    updatePerformanceChart(validPositions);
   } catch (e) {
-    console.error("Allocation Chart Error:", e);
+    console.error("Chart Rendering Error:", e);
   }
+}
+
+let performanceChart = null;
+
+function updatePerformanceChart(positions) {
+  const canvas = document.getElementById('performanceChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  if (performanceChart) {
+    performanceChart.destroy();
+  }
+
+  if (positions.length === 0) return;
+
+  const data = {
+    labels: positions.map(p => p.ticker),
+    datasets: [{
+      label: 'Gains/Losses ($)',
+      data: positions.map(p => p.gain_loss),
+      backgroundColor: positions.map(p => (p.gain_loss >= 0 ? '#10b981' : '#f43f5e')),
+      borderRadius: 6,
+    }]
+  };
+
+  performanceChart = new Chart(ctx, {
+    type: 'bar',
+    data: data,
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => ` P&L: ${item.raw >= 0 ? '+' : ''}$${fmt(item.raw)}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { callback: (val) => (val >= 0 ? '+' : '') + '$' + val }
+        },
+        y: {
+          grid: { display: false }
+        }
+      },
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
 }
 
 function updateAllocationChart(positions) {

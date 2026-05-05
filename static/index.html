@@ -251,14 +251,24 @@
         <!-- PORTFOLIO TAB -->
         <div id="tab-content-portfolio">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Portfolio</h1>
-            <div class="flex gap-2">
-              <button onclick="toggleAddForm()" class="btn-secondary text-sm flex items-center gap-2">
+            <div class="flex flex-col">
+              <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Portfolio</h1>
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest sm:hidden mt-0.5">Manage holdings
+              </p>
+            </div>
+            <div class="flex items-center gap-3">
+              <!-- View Switcher (Segmented Control) -->
+              <div class="inline-flex p-1 bg-slate-100 rounded-xl">
+                <button id="view-tab-list" onclick="switchPortfolioView('list')"
+                  class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm">List</button>
+                <button id="view-tab-charts" onclick="switchPortfolioView('charts')"
+                  class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-700">Analytics</button>
+              </div>
+              <button onclick="toggleAddForm()"
+                class="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-500/20 hover:bg-brand-600 transition-all transform active:scale-95">
                 <span id="toggle-icon">＋</span>
-                <span id="toggle-text">Add Position</span>
+                <span id="toggle-text" class="hidden sm:inline">Add Position</span>
               </button>
-              <button onclick="loadPortfolio()" class="btn-secondary text-xs px-3 py-2 hidden sm:block">↻
-                Refresh</button>
             </div>
           </div>
 
@@ -306,53 +316,59 @@
             </div>
           </div>
 
-          <!-- Summary Cards & Chart Overlay -->
-          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-            <div id="portfolio-summary" class="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <!-- Populated by app.js -->
-            </div>
-            <div
-              class="card p-4 flex flex-col items-center bg-white min-h-[220px] border border-slate-100 shadow-sm relative">
-              <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 w-full">Current Allocation
-              </p>
-              <div class="w-full h-[120px] relative flex items-center justify-center">
-                <canvas id="allocationChart"></canvas>
-              </div>
-              <div id="chart-legend" class="mt-4 w-full flex flex-wrap gap-x-3 gap-y-1.5 justify-center">
+          <!-- Analytics View (Charts) -->
+          <div id="view-content-charts" class="hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+              <div id="portfolio-summary" class="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <!-- Populated by app.js -->
               </div>
+              <div
+                class="card p-4 flex flex-col items-center bg-white min-h-[220px] border border-slate-100 shadow-sm relative">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 w-full text-center">
+                  Current Allocation</p>
+                <div class="w-full h-[120px] relative flex items-center justify-center">
+                  <canvas id="allocationChart"></canvas>
+                </div>
+                <div id="chart-legend" class="mt-4 w-full flex flex-wrap gap-x-3 gap-y-1.5 justify-center"></div>
+              </div>
+            </div>
+
+            <div class="card p-6 border border-slate-100 shadow-sm mb-8">
+              <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Performance by Stock (P&L
+                $)</p>
+              <div class="w-full h-[250px]">
+                <canvas id="performanceChart"></canvas>
+              </div>
             </div>
           </div>
 
-          <!-- Desktop Table -->
-          <div class="hidden md:block card overflow-hidden border border-slate-100 shadow-sm">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-slate-50 bg-slate-50/30">
-                  <th class="px-5 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stock
-                  </th>
-                  <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Qty
-                  </th>
-                  <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avg
-                    Cost</th>
-                  <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Price
-                  </th>
-                  <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Value
-                  </th>
-                  <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">P&L
-                  </th>
-                  <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Return
-                  </th>
-                  <th class="px-4 py-4"></th>
-                </tr>
-              </thead>
-              <tbody id="portfolio-tbody" class="divide-y divide-slate-100"></tbody>
-            </table>
-          </div>
-
-          <!-- Mobile ListView -->
-          <div id="portfolio-mobile-list" class="md:hidden space-y-3">
-            <!-- Populated by app.js -->
+          <!-- List View (Table/Mobile) -->
+          <div id="view-content-list" class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div class="hidden md:block card overflow-hidden border border-slate-100 shadow-sm">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-slate-50 bg-slate-50/30">
+                    <th class="px-5 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stock
+                    </th>
+                    <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Qty
+                    </th>
+                    <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avg
+                      Cost</th>
+                    <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Price</th>
+                    <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Value</th>
+                    <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">P&L
+                    </th>
+                    <th class="px-4 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Return</th>
+                    <th class="px-4 py-4"></th>
+                  </tr>
+                </thead>
+                <tbody id="portfolio-tbody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+            <div id="portfolio-mobile-list" class="md:hidden space-y-3"></div>
           </div>
         </div>
 
