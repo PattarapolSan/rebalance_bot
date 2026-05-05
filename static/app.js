@@ -167,24 +167,40 @@ function renderPortfolio(positions) {
 
 function updateAllocationChart(positions) {
   const ctx = document.getElementById('allocationChart').getContext('2d');
+  const legendContainer = document.getElementById('chart-legend');
 
   if (allocationChart) {
     allocationChart.destroy();
   }
 
-  if (positions.length === 0) return;
+  if (positions.length === 0) {
+    legendContainer.innerHTML = "";
+    return;
+  }
+
+  // Predefined colors
+  const colors = [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6',
+    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'
+  ];
 
   const data = {
     labels: positions.map(p => p.ticker),
     datasets: [{
       data: positions.map(p => p.current_value),
-      backgroundColor: [
-        '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'
-      ],
+      backgroundColor: colors.slice(0, positions.length),
       borderWidth: 0,
       hoverOffset: 4
     }]
   };
+
+  // Generate legend HTML
+  legendContainer.innerHTML = positions.map((p, i) => `
+    <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100">
+      <span class="w-2 h-2 rounded-full" style="background-color: ${colors[i % colors.length]}"></span>
+      <span class="text-[9px] font-bold text-slate-600 uppercase tracking-tighter">${p.ticker}</span>
+    </div>
+  `).join("");
 
   allocationChart = new Chart(ctx, {
     type: 'doughnut',
