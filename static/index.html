@@ -257,7 +257,6 @@
               </p>
             </div>
             <div class="flex items-center gap-3">
-              <!-- View Switcher (Segmented Control) -->
               <div class="inline-flex p-1 bg-slate-100 rounded-xl">
                 <button id="view-tab-list" onclick="switchPortfolioView('list')"
                   class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm">List</button>
@@ -272,7 +271,12 @@
             </div>
           </div>
 
-          <!-- Add Position Form (Hidden by default) -->
+          <!-- PERSISTENT SUMMARY (Global) -->
+          <div id="portfolio-summary" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <!-- Populated by app.js -->
+          </div>
+
+          <!-- Add Position Form -->
           <div id="add-form-container" class="hidden mb-8 transition-all duration-300">
             <div class="card p-6 border-brand-100 bg-brand-50/10">
               <div class="flex items-center justify-between mb-4">
@@ -318,31 +322,35 @@
 
           <!-- Analytics View (Charts) -->
           <div id="view-content-charts" class="hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-              <div id="portfolio-summary" class="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <!-- Populated by app.js -->
-              </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <div
-                class="card p-4 flex flex-col items-center bg-white min-h-[220px] border border-slate-100 shadow-sm relative">
+                class="card p-4 flex flex-col items-center bg-white min-h-[250px] border border-slate-100 shadow-sm relative">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 w-full text-center">
                   Current Allocation</p>
-                <div class="w-full h-[120px] relative flex items-center justify-center">
+                <div class="w-full h-[140px] relative flex items-center justify-center">
                   <canvas id="allocationChart"></canvas>
                 </div>
                 <div id="chart-legend" class="mt-4 w-full flex flex-wrap gap-x-3 gap-y-1.5 justify-center"></div>
               </div>
+              <div class="card p-6 border border-slate-100 shadow-sm">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Absolute Performance (P&L
+                  $)</p>
+                <div class="w-full h-[200px]">
+                  <canvas id="performanceChart"></canvas>
+                </div>
+              </div>
             </div>
 
             <div class="card p-6 border border-slate-100 shadow-sm mb-8">
-              <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Performance by Stock (P&L
-                $)</p>
+              <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Relative Performance (ROI
+                %)</p>
               <div class="w-full h-[250px]">
-                <canvas id="performanceChart"></canvas>
+                <canvas id="returnChart"></canvas>
               </div>
             </div>
           </div>
 
-          <!-- List View (Table/Mobile) -->
+          <!-- List View -->
           <div id="view-content-list" class="animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div class="hidden md:block card overflow-hidden border border-slate-100 shadow-sm">
               <table class="w-full text-sm">

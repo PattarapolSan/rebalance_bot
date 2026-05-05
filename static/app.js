@@ -66,6 +66,7 @@ function switchPortfolioView(view) {
       setTimeout(() => {
         updateAllocationChart(currentPortfolio);
         updatePerformanceChart(currentPortfolio);
+        updateReturnChart(currentPortfolio);
       }, 0);
     }
   }
@@ -192,6 +193,7 @@ function renderPortfolio(positions) {
   try {
     updateAllocationChart(validPositions);
     updatePerformanceChart(validPositions);
+    updateReturnChart(validPositions);
   } catch (e) {
     console.error("Chart Rendering Error:", e);
   }
@@ -248,8 +250,66 @@ function updatePerformanceChart(positions) {
   });
 }
 
+let returnChart = null;
+
+function updateReturnChart(positions) {
+  const canvas = document.getElementById('returnChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  if (returnChart) {
+    returnChart.destroy();
+  }
+
+  if (positions.length === 0) return;
+
+  // Filter out positions with no cost basis if any
+  const sorted = [...positions].sort((a, b) => b.return_pct - a.return_pct);
+
+  const data = {
+    labels: sorted.map(p => p.ticker),
+    datasets: [{
+      label: 'Return (%)',
+      data: sorted.map(p => p.return_pct),
+      backgroundColor: sorted.map(p => (p.return_pct >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)')),
+      borderColor: sorted.map(p => (p.return_pct >= 0 ? '#10b981' : '#f43f5e')),
+      borderWidth: 2,
+      borderRadius: 4,
+    }]
+  };
+
+  returnChart = new Chart(ctx, {
+    type: 'bar',
+    data: data,
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => ` Return: ${item.raw >= 0 ? '+' : ''}${item.raw.toFixed(2)}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#f1f5f9' },
+          ticks: { callback: (val) => val + '%' }
+        },
+        y: {
+          grid: { display: false }
+        }
+      },
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+}
+
 function updateAllocationChart(positions) {
-  const ctx = document.getElementById('allocationChart').getContext('2d');
+  const canvas = document.getElementById('allocationChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
   const legendContainer = document.getElementById('chart-legend');
 
   if (allocationChart) {
