@@ -126,6 +126,19 @@ function renderPortfolio(positions) {
       <p class="text-xs ${totalGL >= 0 ? 'text-green-500' : 'text-red-400'} mt-1">${totalGL >= 0 ? "▲ Profit" : "▼ Loss"}</p>
     </div>`;
 
+  const mobileList = document.getElementById("portfolio-mobile-list");
+
+  // Filter out any positions without a ticker (rare)
+  const validPositions = positions.filter(p => p.ticker);
+
+  // Render Desktop Table
+  renderDesktopTable(validPositions, tbody);
+
+  // Render Mobile List
+  renderMobileList(validPositions, mobileList);
+}
+
+function renderDesktopTable(positions, tbody) {
   tbody.innerHTML = positions.map(p => {
     const glColor = (p.gain_loss || 0) >= 0 ? "gain" : "loss";
     return `<tr class="border-t border-slate-50 hover:bg-slate-50/50 transition-colors group">
@@ -155,6 +168,66 @@ function renderPortfolio(positions) {
       </td>
     </tr>`;
   }).join("");
+}
+
+function renderMobileList(positions, container) {
+  if (positions.length === 0) {
+    container.innerHTML = '<div class="p-6 text-center text-slate-400 italic">No positions yet</div>';
+    return;
+  }
+
+  container.innerHTML = positions.map(p => {
+    const glColor = (p.gain_loss || 0) >= 0 ? "text-green-600" : "text-red-500";
+    return `
+      <div class="card p-4 border border-slate-100 shadow-sm active:bg-slate-50 transition-colors" onclick="toggleDetails(${p.id})">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-slate-900 text-lg">${p.ticker}</span>
+            <span class="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded tracking-tighter">${fmt(p.quantity)} Shares</span>
+          </div>
+          <div class="flex flex-col items-end">
+            <span class="font-bold text-slate-900">$${fmt(p.current_price)}</span>
+            <span class="text-xs font-bold ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : ""}${fmtPct(p.gain_loss_pct)}</span>
+          </div>
+        </div>
+        
+        <!-- Expandable details -->
+        <div id="details-${p.id}" class="hidden mt-4 pt-4 border-t border-slate-50 space-y-3">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Average Cost</p>
+              <p class="font-semibold text-slate-700">$${fmt(p.entry_price)}</p>
+            </div>
+            <div>
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Total Value</p>
+              <p class="font-semibold text-slate-700">$${fmt(p.current_value)}</p>
+            </div>
+            <div>
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Total P&L</p>
+              <p class="font-bold ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : "-"}$${fmt(Math.abs(p.gain_loss || 0))}</p>
+            </div>
+            <div>
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Notes</p>
+              <p class="text-xs text-slate-500">${p.notes || "—"}</p>
+            </div>
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button onclick="event.stopPropagation(); openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes || "").replace(/'/g, "\\'")}')"
+              class="flex-1 btn-secondary py-2 text-xs">Edit</button>
+            <button onclick="event.stopPropagation(); deletePosition(${p.id})"
+              class="flex-1 border border-red-100 text-red-500 font-bold rounded-lg text-xs hover:bg-red-50 transition-colors">Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function toggleDetails(id) {
+  const el = document.getElementById(`details-${id}`);
+  if (el) {
+    el.classList.toggle("hidden");
+  }
 }
 
 async function addPosition() {

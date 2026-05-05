@@ -213,7 +213,8 @@
 
     <aside id="sidebar"
       class="w-64 bg-white border-r border-slate-100 flex flex-col fixed h-full z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
-      <div class="px-6 py-6 border-b border-slate-50">
+      <!-- Sidebar Logo - Hidden on Mobile -->
+      <div class="hidden md:block px-6 py-6 border-b border-slate-50">
         <div class="flex items-center gap-3">
           <div
             class="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl shadow-lg shadow-brand-500/20 flex items-center justify-center text-white text-xl">
@@ -298,9 +299,9 @@
             </div>
           </div>
 
-          <!-- Table -->
-          <div class="card overflow-x-auto shadow-sm border border-slate-100">
-            <table class="w-full text-sm min-w-[850px] md:min-w-0">
+          <!-- Desktop Table -->
+          <div class="hidden md:block card overflow-hidden border border-slate-100 shadow-sm">
+            <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-slate-50 bg-slate-50/30">
                   <th class="px-5 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stock
@@ -320,12 +321,13 @@
                   <th class="px-4 py-4"></th>
                 </tr>
               </thead>
-              <tbody id="portfolio-tbody" class="divide-y divide-slate-100">
-                <tr>
-                  <td colspan="8" class="px-5 py-12 text-center text-slate-400 text-sm italic">Loading positions…</td>
-                </tr>
-              </tbody>
+              <tbody id="portfolio-tbody" class="divide-y divide-slate-100"></tbody>
             </table>
+          </div>
+
+          <!-- Mobile ListView -->
+          <div id="portfolio-mobile-list" class="md:hidden space-y-3">
+            <!-- Populated by app.js -->
           </div>
         </div>
 
