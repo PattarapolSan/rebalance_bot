@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rebalance Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .tab-active { color: #4f46e5; border-bottom: 2px solid #4f46e5; }
+    .gain { color: #16a34a; }
+    .loss { color: #dc2626; }
+    #advisor-output { white-space: pre-wrap; line-height: 1.7; }
+    .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+    .card { background: white; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04); }
+    .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+    .pill-buy_more { background: #dcfce7; color: #15803d; }
+    .pill-hold     { background: #fef9c3; color: #a16207; }
+    .pill-sell     { background: #fee2e2; color: #b91c1c; }
+    .pill-high     { background: #ede9fe; color: #6d28d9; }
+    .pill-medium   { background: #f0fdf4; color: #166534; }
+    .pill-low      { background: #f8fafc; color: #475569; }
+    input:focus, select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .btn-primary { background: #4f46e5; color: white; border-radius: 10px; padding: 9px 20px; font-size: 14px; font-weight: 600; transition: background .15s; cursor: pointer; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-secondary { background: #f1f5f9; color: #334155; border-radius: 10px; padding: 9px 20px; font-size: 14px; font-weight: 600; transition: background .15s; cursor: pointer; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .input { border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 9px 13px; font-size: 14px; width: 100%; transition: border-color .15s, box-shadow .15s; }
+    .signal-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot-green { background: #22c55e; }
+    .dot-yellow { background: #eab308; }
+    .dot-red { background: #ef4444; }
+    .rsi-bar { height: 6px; border-radius: 3px; background: #e2e8f0; }
+    .rsi-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+  <!-- Sidebar -->
+  <div class="flex min-h-screen">
+    <aside class="w-56 bg-white border-r border-slate-100 flex flex-col fixed h-full z-10">
+      <div class="px-6 py-5 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center text-white text-base">📈</div>
+          <span class="font-bold text-slate-800 text-base">Rebalance</span>
+        </div>
+      </div>
+      <nav class="flex-1 px-3 py-4 space-y-1">
+        <button onclick="showTab('portfolio')" id="tab-portfolio"
+          class="tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors tab-active-sidebar">
+          <span class="text-base">💼</span> Portfolio
+        </button>
+        <button onclick="showTab('analysis')" id="tab-analysis"
+          class="tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+          <span class="text-base">📊</span> Analysis
+        </button>
+        <button onclick="showTab('advisor')" id="tab-advisor"
+          class="tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+          <span class="text-base">💡</span> Advisor
+        </button>
+      </nav>
+      <div class="px-4 py-4 border-t border-slate-100">
+        <p class="text-xs text-slate-400">Daily report: 6:00 PM</p>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <div class="flex-1 ml-56">
+      <main class="max-w-4xl mx-auto px-6 py-8">
+
+        <!-- PORTFOLIO TAB -->
+        <div id="tab-content-portfolio">
+          <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-bold text-slate-900">Portfolio</h1>
+            <button onclick="loadPortfolio()" class="btn-secondary text-xs px-3 py-2">↻ Refresh</button>
+          </div>
+
+          <!-- Summary cards -->
+          <div id="portfolio-summary" class="grid grid-cols-3 gap-4 mb-6"></div>
+
+          <!-- Add form -->
+          <div class="card p-5 mb-6">
+            <h2 class="text-sm font-semibold text-slate-700 mb-4">Add Position</h2>
+            <div class="grid grid-cols-5 gap-3">
+              <div>
+                <label class="text-xs text-slate-400 font-medium block mb-1">Ticker</label>
+                <input id="add-ticker" placeholder="AAPL" class="input uppercase" />
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 font-medium block mb-1">Quantity</label>
+                <input id="add-qty" type="number" placeholder="10" class="input" />
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 font-medium block mb-1">Entry Price ($)</label>
+                <input id="add-price" type="number" step="0.01" placeholder="150.00" class="input" />
+              </div>
+              <div class="col-span-2">
+                <label class="text-xs text-slate-400 font-medium block mb-1">Notes</label>
+                <div class="flex gap-2">
+                  <input id="add-notes" placeholder="Optional" class="input flex-1" />
+                  <button onclick="addPosition()" class="btn-primary whitespace-nowrap">+ Add</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table -->
+          <div class="card overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-slate-100">
+                  <th class="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Stock</th>
+                  <th class="px-4 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Qty</th>
+                  <th class="px-4 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Avg Cost</th>
+                  <th class="px-4 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Price</th>
+                  <th class="px-4 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Value</th>
+                  <th class="px-4 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">P&L</th>
+                  <th class="px-4 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Return</th>
+                  <th class="px-4 py-3.5"></th>
+                </tr>
+              </thead>
+              <tbody id="portfolio-tbody">
+                <tr><td colspan="8" class="px-5 py-10 text-center text-slate-400 text-sm">Loading positions…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ANALYSIS TAB -->
+        <div id="tab-content-analysis" class="hidden">
+          <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-bold text-slate-900">Daily Analysis</h1>
+            <div class="flex gap-2 items-center">
+              <select id="report-date-select" onchange="loadReport(this.value)"
+                class="input w-auto text-sm py-2"></select>
+              <button onclick="triggerAnalysis()" class="btn-primary">▶ Run Now</button>
+            </div>
+          </div>
+          <div id="analysis-content">
+            <div class="card p-12 text-center text-slate-400">
+              <p class="text-4xl mb-3">📊</p>
+              <p class="font-medium">No analysis yet</p>
+              <p class="text-sm mt-1">Click "Run Now" to generate your first report</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ADVISOR TAB -->
+        <div id="tab-content-advisor" class="hidden">
+          <div class="mb-6">
+            <h1 class="text-2xl font-bold text-slate-900">Investment Advisor</h1>
+            <p class="text-sm text-slate-400 mt-1">Tell Claude your budget and risk appetite — it'll search the market and suggest what to buy.</p>
+          </div>
+
+          <div class="card p-6 mb-5">
+            <div class="grid grid-cols-2 gap-4 mb-5">
+              <div>
+                <label class="text-xs font-semibold text-slate-500 block mb-1.5">Budget (USD)</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                  <input id="advisor-budget" type="number" value="500" class="input pl-7" />
+                </div>
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-slate-500 block mb-1.5">Risk Level</label>
+                <select id="advisor-risk" class="input">
+                  <option value="low">🛡️ Low — Stable &amp; Dividends</option>
+                  <option value="medium" selected>⚖️ Medium — Balanced Growth</option>
+                  <option value="high">🚀 High — Aggressive Growth</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-slate-500 block mb-1.5">Sector Preference <span class="text-slate-300">(optional)</span></label>
+                <input id="advisor-sector" placeholder="e.g. Tech, Healthcare, Energy" class="input" />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-slate-500 block mb-1.5">Notes <span class="text-slate-300">(optional)</span></label>
+                <input id="advisor-notes" placeholder="e.g. avoid oil, focus on dividend growth" class="input" />
+              </div>
+            </div>
+            <button onclick="getAdvice()" class="btn-primary w-full py-3 text-base">✨ Get Suggestions</button>
+          </div>
+
+          <div id="advisor-result" class="hidden card p-6">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+              <h3 class="font-semibold text-slate-700">Claude's Recommendations</h3>
+            </div>
+            <div id="advisor-output" class="text-sm text-slate-700 leading-relaxed"></div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-96 mx-4">
+      <h3 class="font-bold text-slate-900 mb-4">Edit Position</h3>
+      <input type="hidden" id="edit-id" />
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold text-slate-500 block mb-1.5">Quantity</label>
+          <input id="edit-qty" type="number" class="input" />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500 block mb-1.5">Entry Price ($)</label>
+          <input id="edit-price" type="number" step="0.01" class="input" />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500 block mb-1.5">Notes</label>
+          <input id="edit-notes" class="input" />
+        </div>
+      </div>
+      <div class="flex gap-3 mt-5">
+        <button onclick="saveEdit()" class="btn-primary flex-1">Save Changes</button>
+        <button onclick="closeModal()" class="btn-secondary flex-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

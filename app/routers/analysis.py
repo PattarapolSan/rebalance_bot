@@ -1,0 +1,96 @@
+import json
+from datetime import date
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from app.database import get_db
+from app.models.analysis import DailyReport, StockAnalysis
+from app.schemas.analysis import DailyReportResponse, StockAnalysisResponse
+
+router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
+
+
+def _build_report_response(report: DailyReport, analyses: list[StockAnalysis]) -> DailyReportResponse:
+    summary = {}
+    try:
+        summary = json.loads(report.portfolio_summary) if report.portfolio_summary else {}
+    except Exception:
+        pass
+
+    stock_responses = []
+    for a in analyses:
+        headlines = []
+        try:
+            headlines = json.loads(a.news_headlines) if a.news_headlines else []
+        except Exception:
+            pass
+        stock_responses.append(StockAnalysisResponse(
+            id=a.id,
+            ticker=a.ticker,
+            current_price=a.current_price,
+            rsi_14=a.rsi_14,
+            sma_20=a.sma_20,
+            sma_50=a.sma_50,
+            volume_ratio=a.volume_ratio,
+            sma_cross=a.sma_cross,
+            news_headlines=headlines,
+            recommendation=a.recommendation,
+            rationale=a.rationale,
+            confidence=a.confidence,
+        ))
+
+    return DailyReportResponse(
+        id=report.id,
+        report_date=report.report_date,
+        generated_at=report.generated_at,
+        portfolio_summary=summary,
+        analyses=stock_responses,
+    )
+
+
+@router.get("/latest", response_model=DailyReportResponse)
+async def get_latest_report(db: AsyncSession = Depends(get_db)):
+    report = (await db.execute(
+        select(DailyReport).order_by(DailyReport.report_date.desc()).limit(1)
+    )).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="No reports yet")
+
+    analyses = (await db.execute(
+        select(StockAnalysis).where(StockAnalysis.report_id == report.id)
+    )).scalars().all()
+
+    return _build_report_response(report, list(analyses))
+
+
+@router.get("/history")
+async def list_reports(db: AsyncSession = Depends(get_db)):
+    reports = (await db.execute(
+        select(DailyReport.id, DailyReport.report_date, DailyReport.generated_at)
+        .order_by(DailyReport.report_date.desc())
+    )).all()
+    return [{"id": r.id, "date": str(r.report_date), "generated_at": r.generated_at} for r in reports]
+
+
+@router.get("/{report_date}", response_model=DailyReportResponse)
+async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_db)):
+    report = (await db.execute(
+        select(DailyReport).where(DailyReport.report_date == report_date)
+    )).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"No report for {report_date}")
+
+    analyses = (await db.execute(
+        select(StockAnalysis).where(StockAnalysis.report_id == report.id)
+    )).scalars().all()
+
+    return _build_report_response(report, list(analyses))
+
+
+@router.post("/trigger", status_code=202)
+async def trigger_analysis(background_tasks: BackgroundTasks):
+    from app.services.scheduler import run_daily_analysis
+    background_tasks.add_task(run_daily_analysis, True)  # force=True skips stability check
+    return {"message": "Analysis triggered in background"}
