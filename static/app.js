@@ -140,8 +140,13 @@ async function loadPortfolio() {
 }
 
 function renderPortfolio(positions) {
+  console.log("renderPortfolio started with", positions?.length, "positions");
   const tbody = document.getElementById("portfolio-tbody");
   const summary = document.getElementById("portfolio-summary");
+  if (!tbody || !summary) {
+    console.error("Critical UI elements missing: tbody or summary");
+    return;
+  }
 
   if (positions.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-12 text-center">
@@ -159,19 +164,23 @@ function renderPortfolio(positions) {
   const totalGLPct = totalCost ? (totalGL / totalCost * 100) : 0;
   const glColor = totalGL >= 0 ? "text-green-600" : "text-red-500";
 
-  summary.innerHTML = `
-    <div class="col-span-2 card p-4 border border-brand-100 bg-brand-50/5">
-      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 text-center">Portfolio Total Value</p>
-      <p class="text-3xl font-black text-slate-900 text-center tracking-tight">$${fmt(totalValue)}</p>
-    </div>
-    <div class="card p-3 flex flex-col items-center justify-center border-slate-100 shadow-sm">
-      <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total P&L</p>
-      <p class="text-lg font-bold ${glColor}">${totalGL >= 0 ? "+" : ""}$${fmt(Math.abs(totalGL))}</p>
-    </div>
-    <div class="card p-3 flex flex-col items-center justify-center border-slate-100 shadow-sm">
-      <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Return</p>
-      <p class="text-lg font-bold ${glColor}">${fmtPct(totalGLPct)}</p>
-    </div>`;
+  try {
+    summary.innerHTML = `
+      <div class="col-span-2 card p-4 border border-brand-100 bg-brand-50/5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 text-center">Portfolio Total Value</p>
+        <p class="text-3xl font-black text-slate-900 text-center tracking-tight">$${fmt(totalValue)}</p>
+      </div>
+      <div class="card p-3 flex flex-col items-center justify-center border-slate-100 shadow-sm">
+        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total P&L</p>
+        <p class="text-lg font-bold ${glColor}">${totalGL >= 0 ? "+" : ""}$${fmt(Math.abs(totalGL))}</p>
+      </div>
+      <div class="card p-3 flex flex-col items-center justify-center border-slate-100 shadow-sm">
+        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Return</p>
+        <p class="text-lg font-bold ${glColor}">${fmtPct(totalGLPct)}</p>
+      </div>`;
+  } catch (e) {
+    console.error("Summary Render Error:", e);
+  }
 
   const mobileList = document.getElementById("portfolio-mobile-list");
   console.log("Rendering portfolio. Positions:", positions.length, "Mobile element:", !!mobileList);
@@ -260,16 +269,16 @@ function updateReturnChart(positions) {
 
   if (positions.length === 0) return;
 
-  // Filter out positions with no cost basis if any
-  const sorted = [...positions].sort((a, b) => b.return_pct - a.return_pct);
+  // Use gain_loss_pct from backend
+  const sorted = [...positions].sort((a, b) => (b.gain_loss_pct || 0) - (a.gain_loss_pct || 0));
 
   const data = {
     labels: sorted.map(p => p.ticker),
     datasets: [{
       label: 'Return (%)',
-      data: sorted.map(p => p.return_pct),
-      backgroundColor: sorted.map(p => (p.return_pct >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)')),
-      borderColor: sorted.map(p => (p.return_pct >= 0 ? '#10b981' : '#f43f5e')),
+      data: sorted.map(p => p.gain_loss_pct || 0),
+      backgroundColor: sorted.map(p => ((p.gain_loss_pct || 0) >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)')),
+      borderColor: sorted.map(p => ((p.gain_loss_pct || 0) >= 0 ? '#10b981' : '#f43f5e')),
       borderWidth: 2,
       borderRadius: 4,
     }]
