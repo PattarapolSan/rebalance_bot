@@ -681,5 +681,58 @@ async function getAdvice() {
   }
 }
 
+// ── Utilities ────────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  if (n == null) return "0.00";
+  return new Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtPct(n) {
+  if (n == null) return "0.00%";
+  return (n >= 0 ? "+" : "") + fmt(n) + "%";
+}
+
+function pill(text) {
+  if (!text) return "";
+  const colors = {
+    buy_more: "bg-green-100 text-green-700",
+    hold: "bg-yellow-100 text-yellow-700",
+    sell: "bg-red-100 text-red-700",
+    high: "bg-red-100 text-red-700",
+    medium: "bg-yellow-100 text-yellow-700",
+    low: "bg-green-100 text-green-700"
+  };
+  const cls = colors[text.toLowerCase()] || "bg-slate-100 text-slate-700";
+  return `<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${cls}">${text.replace(/_/g, " ")}</span>`;
+}
+
+async function api(method, endpoint, body) {
+  const res = await fetch(`${API}${endpoint}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : null
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.detail || "API Error");
+  }
+  return res.json();
+}
+
+function toast(msg, isError = false) {
+  const t = document.createElement("div");
+  t.className = `fixed bottom-6 right-6 px-6 py-3 rounded-xl shadow-2xl z-50 transition-all duration-300 ${isError ? "bg-red-500 text-white" : "bg-slate-900 text-white"
+    }`;
+  t.innerHTML = `
+    <div class="flex items-center gap-3">
+      ${isError ? '<span>⚠️</span>' : '<span>✅</span>'}
+      <span class="font-bold text-sm">${msg}</span>
+    </div>
+  `;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 showTab("portfolio");
