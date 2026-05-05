@@ -127,9 +127,11 @@ function renderPortfolio(positions) {
     </div>`;
 
   const mobileList = document.getElementById("portfolio-mobile-list");
+  console.log("Rendering portfolio. Positions:", positions.length, "Mobile element:", !!mobileList);
 
   // Filter out any positions without a ticker (rare)
   const validPositions = positions.filter(p => p.ticker);
+  console.log("Valid positions for display:", validPositions.length);
 
   // Render Desktop Table
   renderDesktopTable(validPositions, tbody);

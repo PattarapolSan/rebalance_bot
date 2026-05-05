@@ -7,7 +7,10 @@ from app.config import settings
 MODEL = "claude-3-7-sonnet-20250219"
 
 # Web search tool — must use versioned tag as per API error
-WEB_SEARCH_TOOL = {"type": "web_search_20260209"}
+WEB_SEARCH_TOOL = {
+    "type": "web_search_20260209",
+    "name": "web_search"
+}
 
 _client: anthropic.AsyncAnthropic | None = None
 
