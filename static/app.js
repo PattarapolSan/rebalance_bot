@@ -93,38 +93,6 @@ function toggleSidebar(force) {
   }
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-const fmt = (n) => n == null ? "—" : new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-const fmtPct = (n) => n == null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
-const glClass = (n) => n == null ? "" : (n >= 0 ? "gain font-semibold" : "loss font-semibold");
-
-async function api(method, path, body) {
-  const opts = { method, headers: { "Content-Type": "application/json" } };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Request failed");
-  }
-  return res.json();
-}
-
-function pill(val, type = "rec") {
-  const key = val.toLowerCase().replace(/ /g, "_");
-  const label = val.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  return `<span class="pill pill-${key}">${label}</span>`;
-}
-
-function toast(msg, isError = false) {
-  const container = document.getElementById("toast-container");
-  const t = document.createElement("div");
-  t.className = `flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${isError ? "bg-red-500" : "bg-slate-800"} transition-all`;
-  t.innerHTML = `<span>${isError ? "⚠️" : "✓"}</span><span>${msg}</span>`;
-  container.appendChild(t);
-  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, 3200);
-}
-
 // ── PORTFOLIO ────────────────────────────────────────────────────────────────
 
 async function loadPortfolio() {
