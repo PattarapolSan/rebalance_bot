@@ -1,4 +1,22 @@
 const API = "/api/v1";
+let currentPortfolio = [];
+let allocationChart = null;
+
+function toggleAddForm() {
+  const container = document.getElementById("add-form-container");
+  const icon = document.getElementById("toggle-icon");
+  const text = document.getElementById("toggle-text");
+
+  if (container.classList.contains("hidden")) {
+    container.classList.remove("hidden");
+    icon.textContent = "✕";
+    text.textContent = "Close";
+  } else {
+    container.classList.add("hidden");
+    icon.textContent = "＋";
+    text.textContent = "Add Position";
+  }
+}
 
 // ── Tab navigation ──────────────────────────────────────────────────────────
 
@@ -138,24 +156,75 @@ function renderPortfolio(positions) {
 
   // Render Mobile List
   renderMobileList(validPositions, mobileList);
+
+  // Update Chart
+  updateAllocationChart(validPositions);
+}
+
+function updateAllocationChart(positions) {
+  const ctx = document.getElementById('allocationChart').getContext('2d');
+
+  if (allocationChart) {
+    allocationChart.destroy();
+  }
+
+  if (positions.length === 0) return;
+
+  const data = {
+    labels: positions.map(p => p.ticker),
+    datasets: [{
+      data: positions.map(p => p.current_value),
+      backgroundColor: [
+        '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'
+      ],
+      borderWidth: 0,
+      hoverOffset: 4
+    }]
+  };
+
+  allocationChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: data,
+    options: {
+      cutout: '70%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => ` ${item.label}: $${fmt(item.raw)}`
+          }
+        }
+      },
+      maintainAspectRatio: false
+    }
+  });
 }
 
 function renderDesktopTable(positions, tbody) {
   tbody.innerHTML = positions.map(p => {
-    const glColor = (p.gain_loss || 0) >= 0 ? "gain" : "loss";
+    const isGain = (p.gain_loss || 0) >= 0;
+    const glBg = isGain ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700";
+    const glColor = isGain ? "text-green-600" : "text-red-500";
+
     return `<tr class="border-t border-slate-50 hover:bg-slate-50/50 transition-colors group">
       <td class="px-5 py-4">
         <div class="flex flex-col">
           <span class="font-bold text-slate-900 tracking-tight">${p.ticker}</span>
-          ${p.notes ? `<span class="text-[10px] text-slate-400 font-medium mt-0.5">${p.notes}</span>` : ""}
+          ${p.notes ? `<span class="text-[10px] text-slate-400 font-medium mt-0.5 max-w-[150px] truncate">${p.notes}</span>` : ""}
         </div>
       </td>
       <td class="px-4 py-4 text-right text-slate-600 font-medium">${fmt(p.quantity)}</td>
       <td class="px-4 py-4 text-right text-slate-400 font-medium">$${fmt(p.entry_price)}</td>
       <td class="px-4 py-4 text-right font-semibold text-slate-800">$${fmt(p.current_price)}</td>
       <td class="px-4 py-4 text-right font-bold text-slate-900">$${fmt(p.current_value)}</td>
-      <td class="px-4 py-4 text-right font-bold ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : ""}$${fmt(Math.abs(p.gain_loss || 0))}</td>
-      <td class="px-4 py-4 text-right font-bold ${glColor}">${fmtPct(p.gain_loss_pct)}</td>
+      <td class="px-4 py-4 text-right">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm ${glBg}">
+          ${isGain ? "+" : ""}$${fmt(Math.abs(p.gain_loss || 0))}
+        </span>
+      </td>
+      <td class="px-4 py-4 text-right">
+        <span class="font-bold cursor-default ${glColor}" title="Return Percentage">${fmtPct(p.gain_loss_pct)}</span>
+      </td>
       <td class="px-4 py-4 text-right">
         <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button onclick="openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes || "").replace(/'/g, "\\'")}')"\
@@ -179,17 +248,21 @@ function renderMobileList(positions, container) {
   }
 
   container.innerHTML = positions.map(p => {
-    const glColor = (p.gain_loss || 0) >= 0 ? "text-green-600" : "text-red-500";
+    const isGain = (p.gain_loss || 0) >= 0;
+    const glBadge = isGain ? "bg-green-50 text-green-600 border-green-100" : "bg-red-50 text-red-500 border-red-100";
+
     return `
-      <div class="card p-4 border border-slate-100 shadow-sm active:bg-slate-50 transition-colors" onclick="toggleDetails(${p.id})">
+      <div class="card p-4 border border-slate-100 shadow-sm active:shadow-md transition-all sm:hover:border-brand-200" onclick="toggleDetails(${p.id})">
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
-            <span class="font-bold text-slate-900 text-lg">${p.ticker}</span>
+            <span class="font-bold text-slate-900 text-lg group-hover:text-brand-600 transition-colors">${p.ticker}</span>
             <span class="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded tracking-tighter">${fmt(p.quantity)} Shares</span>
           </div>
           <div class="flex flex-col items-end">
             <span class="font-bold text-slate-900">$${fmt(p.current_price)}</span>
-            <span class="text-xs font-bold ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : ""}${fmtPct(p.gain_loss_pct)}</span>
+            <div class="mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${glBadge}">
+              ${isGain ? "▲" : "▼"} ${fmtPct(p.gain_loss_pct)}
+            </div>
           </div>
         </div>
         
