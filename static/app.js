@@ -250,6 +250,7 @@ function renderMobileList(positions, container) {
   container.innerHTML = positions.map(p => {
     const isGain = (p.gain_loss || 0) >= 0;
     const glBadge = isGain ? "bg-green-50 text-green-600 border-green-100" : "bg-red-50 text-red-500 border-red-100";
+    const glColor = isGain ? "text-green-600" : "text-red-500";
 
     return `
       <div class="card p-4 border border-slate-100 shadow-sm active:shadow-md transition-all sm:hover:border-brand-200" onclick="toggleDetails(${p.id})">
