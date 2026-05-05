@@ -6,7 +6,7 @@ from app.config import settings
 
 MODEL = "claude-3-7-sonnet-20250219"
 
-# Web search tool — claude-3-7-sonnet uses this type for its built-in search
+# Web search tool — 3.7 sonnet uses "web_search"
 WEB_SEARCH_TOOL = {"type": "web_search"}
 
 _client: anthropic.AsyncAnthropic | None = None
@@ -15,7 +15,16 @@ _client: anthropic.AsyncAnthropic | None = None
 def get_client() -> anthropic.AsyncAnthropic:
     global _client
     if _client is None:
-        _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        if not settings.anthropic_api_key:
+            import logging
+            logging.error("ANTHROPIC_API_KEY is missing from configuration!")
+        _client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            # Add beta headers for caching and search if needed
+            default_headers={
+                "anthropic-beta": "prompt-caching-2024-07-31,output-128k-2025-02-19"
+            }
+        )
     return _client
 
 
@@ -120,19 +129,24 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
 
     # Agentic loop — handles web_search + record_recommendation tool use
     while True:
-        response = await client.messages.create(
-            model=MODEL,
-            max_tokens=8192,
-            system=[
-                {
-                    "type": "text",
-                    "text": DAILY_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            tools=[WEB_SEARCH_TOOL, record_tool],
-            messages=messages,
-        )
+        try:
+            response = await client.messages.create(
+                model=MODEL,
+                max_tokens=8192,
+                system=[
+                    {
+                        "type": "text",
+                        "text": DAILY_SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                tools=[WEB_SEARCH_TOOL, record_tool],
+                messages=messages,
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Anthropic API Error (run_daily_report): {e}")
+            break
 
         messages.append({"role": "assistant", "content": response.content})
 
@@ -190,40 +204,45 @@ async def run_advisor_stream(
     # But since current SDK's .stream() text_stream is limited, we use a loop
     messages = [{"role": "user", "content": user_message}]
     
-    while True:
-        async with client.messages.stream(
-            model=MODEL,
-            max_tokens=2048,
-            system=[{
-                "type": "text",
-                "text": ADVISOR_SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }],
-            tools=[WEB_SEARCH_TOOL],
-            messages=messages,
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
-            
-            final_msg = await stream.get_final_message()
-            messages.append({"role": "assistant", "content": final_msg.content})
-            
-            if final_msg.stop_reason == "end_turn":
-                break
-            
-            tool_results = []
-            for block in final_msg.content:
-                if block.type == "tool_use":
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": "Search currently unavailable. Suggest based on general market knowledge and provided portfolio.",
-                    })
-            
-            if tool_results:
-                messages.append({"role": "user", "content": tool_results})
-            else:
-                break
+    try:
+        while True:
+            async with client.messages.stream(
+                model=MODEL,
+                max_tokens=2048,
+                system=[{
+                    "type": "text",
+                    "text": ADVISOR_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                tools=[WEB_SEARCH_TOOL],
+                messages=messages,
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+                
+                final_msg = await stream.get_final_message()
+                messages.append({"role": "assistant", "content": final_msg.content})
+                
+                if final_msg.stop_reason == "end_turn":
+                    break
+                
+                tool_results = []
+                for block in final_msg.content:
+                    if block.type == "tool_use":
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": "Search currently unavailable. Suggest based on general market knowledge and provided portfolio.",
+                        })
+                
+                if tool_results:
+                    messages.append({"role": "user", "content": tool_results})
+                else:
+                    break
+    except Exception as e:
+        import logging
+        logging.error(f"Anthropic Advisor Stream Error: {e}")
+        yield f"\n\n[Error: {str(e)}]"
 
 
 async def run_watchlist_check(ticker: str, signals: dict, current_price: float) -> dict:
@@ -241,19 +260,24 @@ async def run_watchlist_check(ticker: str, signals: dict, current_price: float) 
 
     # Allow one round of web search before final answer
     while True:
-        response = await client.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": WATCHLIST_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            tools=[WEB_SEARCH_TOOL],
-            messages=messages,
-        )
+        try:
+            response = await client.messages.create(
+                model=MODEL,
+                max_tokens=1024,
+                system=[
+                    {
+                        "type": "text",
+                        "text": WATCHLIST_SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                tools=[WEB_SEARCH_TOOL],
+                messages=messages,
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Anthropic Watchlist Check Error: {e}")
+            return {"signal": "error", "reason": str(e), "entry_price_target": None}
 
         messages.append({"role": "assistant", "content": response.content})
 

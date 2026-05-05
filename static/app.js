@@ -6,13 +6,13 @@ function showTab(name) {
   ["portfolio", "analysis", "advisor"].forEach((t) => {
     document.getElementById(`tab-content-${t}`).classList.add("hidden");
     const btn = document.getElementById(`tab-${t}`);
-    btn.classList.remove("tab-active-sidebar", "bg-brand-50", "text-brand-600");
-    btn.classList.add("text-slate-600");
+    btn.classList.remove("bg-brand-50", "text-brand-600", "shadow-sm", "shadow-brand-500/10", "ring-1", "ring-brand-500/10");
+    btn.classList.add("text-slate-500", "hover:bg-slate-50", "hover:text-slate-700");
   });
   document.getElementById(`tab-content-${name}`).classList.remove("hidden");
   const active = document.getElementById(`tab-${name}`);
-  active.classList.add("bg-brand-50", "text-brand-600");
-  active.classList.remove("text-slate-600");
+  active.classList.add("bg-brand-50", "text-brand-600", "shadow-sm", "shadow-brand-500/10", "ring-1", "ring-brand-500/10");
+  active.classList.remove("text-slate-500", "hover:bg-slate-50", "hover:text-slate-700");
 
   if (name === "portfolio") loadPortfolio();
   if (name === "analysis") loadAnalysisHistory();
@@ -128,23 +128,29 @@ function renderPortfolio(positions) {
 
   tbody.innerHTML = positions.map(p => {
     const glColor = (p.gain_loss || 0) >= 0 ? "gain" : "loss";
-    return `<tr class="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-      <td class="px-5 py-3.5">
-        <span class="font-bold text-slate-900">${p.ticker}</span>
-        ${p.notes ? `<span class="block text-xs text-slate-400 mt-0.5">${p.notes}</span>` : ""}
+    return `<tr class="border-t border-slate-50 hover:bg-slate-50/50 transition-colors group">
+      <td class="px-5 py-4">
+        <div class="flex flex-col">
+          <span class="font-bold text-slate-900 tracking-tight">${p.ticker}</span>
+          ${p.notes ? `<span class="text-[10px] text-slate-400 font-medium mt-0.5">${p.notes}</span>` : ""}
+        </div>
       </td>
-      <td class="px-4 py-3.5 text-right text-slate-600">${p.quantity}</td>
-      <td class="px-4 py-3.5 text-right text-slate-500">$${fmt(p.entry_price)}</td>
-      <td class="px-4 py-3.5 text-right font-medium text-slate-800">$${fmt(p.current_price)}</td>
-      <td class="px-4 py-3.5 text-right font-semibold text-slate-800">$${fmt(p.current_value)}</td>
-      <td class="px-4 py-3.5 text-right ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : ""}$${fmt(Math.abs(p.gain_loss || 0))}</td>
-      <td class="px-4 py-3.5 text-right ${glColor}">${fmtPct(p.gain_loss_pct)}</td>
-      <td class="px-4 py-3.5 text-right">
-        <div class="flex justify-end gap-3">
+      <td class="px-4 py-4 text-right text-slate-600 font-medium">${fmt(p.quantity)}</td>
+      <td class="px-4 py-4 text-right text-slate-400 font-medium">$${fmt(p.entry_price)}</td>
+      <td class="px-4 py-4 text-right font-semibold text-slate-800">$${fmt(p.current_price)}</td>
+      <td class="px-4 py-4 text-right font-bold text-slate-900">$${fmt(p.current_value)}</td>
+      <td class="px-4 py-4 text-right font-bold ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : ""}$${fmt(Math.abs(p.gain_loss || 0))}</td>
+      <td class="px-4 py-4 text-right font-bold ${glColor}">${fmtPct(p.gain_loss_pct)}</td>
+      <td class="px-4 py-4 text-right">
+        <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button onclick="openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes || "").replace(/'/g, "\\'")}')"\
-            class="text-brand-500 text-xs font-medium hover:text-brand-700">Edit</button>
+            class="p-1.5 hover:bg-brand-50 text-brand-500 rounded-lg transition-colors" title="Edit">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+          </button>
           <button onclick="deletePosition(${p.id})"\
-            class="text-red-400 text-xs font-medium hover:text-red-600">Remove</button>
+            class="p-1.5 hover:bg-red-50 text-red-400 rounded-lg transition-colors" title="Remove">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          </button>
         </div>
       </td>
     </tr>`;
