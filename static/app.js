@@ -160,20 +160,17 @@ function renderPortfolio(positions) {
   const glColor = totalGL >= 0 ? "text-green-600" : "text-red-500";
 
   summary.innerHTML = `
-    <div class="card p-5">
-      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Value</p>
-      <p class="text-2xl font-bold text-slate-900">$${fmt(totalValue)}</p>
-      <p class="text-xs text-slate-400 mt-1">${positions.length} position${positions.length !== 1 ? "s" : ""}</p>
+    <div class="col-span-2 card p-4 border border-brand-100 bg-brand-50/5">
+      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 text-center">Portfolio Total Value</p>
+      <p class="text-3xl font-black text-slate-900 text-center tracking-tight">$${fmt(totalValue)}</p>
     </div>
-    <div class="card p-5">
-      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total P&L</p>
-      <p class="text-2xl font-bold ${glColor}">${totalGL >= 0 ? "+" : ""}$${fmt(Math.abs(totalGL))}</p>
-      <p class="text-xs text-slate-400 mt-1">Cost basis: $${fmt(totalCost)}</p>
+    <div class="card p-3 flex flex-col items-center justify-center border-slate-100 shadow-sm">
+      <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total P&L</p>
+      <p class="text-lg font-bold ${glColor}">${totalGL >= 0 ? "+" : ""}$${fmt(Math.abs(totalGL))}</p>
     </div>
-    <div class="card p-5">
-      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Return</p>
-      <p class="text-2xl font-bold ${glColor}">${fmtPct(totalGLPct)}</p>
-      <p class="text-xs ${totalGL >= 0 ? 'text-green-500' : 'text-red-400'} mt-1">${totalGL >= 0 ? "▲ Profit" : "▼ Loss"}</p>
+    <div class="card p-3 flex flex-col items-center justify-center border-slate-100 shadow-sm">
+      <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Return</p>
+      <p class="text-lg font-bold ${glColor}">${fmtPct(totalGLPct)}</p>
     </div>`;
 
   const mobileList = document.getElementById("portfolio-mobile-list");
