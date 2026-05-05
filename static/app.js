@@ -157,8 +157,12 @@ function renderPortfolio(positions) {
   // Render Mobile List
   renderMobileList(validPositions, mobileList);
 
-  // Update Chart
-  updateAllocationChart(validPositions);
+  // Update Chart - Wrap in try-catch to prevent breaking list rendering
+  try {
+    updateAllocationChart(validPositions);
+  } catch (e) {
+    console.error("Allocation Chart Error:", e);
+  }
 }
 
 function updateAllocationChart(positions) {
