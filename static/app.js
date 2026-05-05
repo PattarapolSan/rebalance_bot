@@ -16,6 +16,32 @@ function showTab(name) {
 
   if (name === "portfolio") loadPortfolio();
   if (name === "analysis") loadAnalysisHistory();
+
+  // Auto-close sidebar on mobile after selection
+  if (window.innerWidth < 768) {
+    toggleSidebar(false);
+  }
+}
+
+// ── Mobile Sidebar ──────────────────────────────────────────────────────────
+
+function toggleSidebar(force) {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  const isOpen = sidebar.classList.contains("translate-x-0");
+  const nextOpen = force !== undefined ? force : !isOpen;
+
+  if (nextOpen) {
+    sidebar.classList.remove("-translate-x-full");
+    sidebar.classList.add("translate-x-0");
+    overlay.classList.remove("hidden");
+    setTimeout(() => overlay.classList.remove("opacity-0"), 10);
+  } else {
+    sidebar.classList.add("-translate-x-full");
+    sidebar.classList.remove("translate-x-0");
+    overlay.classList.add("opacity-0");
+    setTimeout(() => overlay.classList.add("hidden"), 300);
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -111,11 +137,11 @@ function renderPortfolio(positions) {
       <td class="px-4 py-3.5 text-right text-slate-500">$${fmt(p.entry_price)}</td>
       <td class="px-4 py-3.5 text-right font-medium text-slate-800">$${fmt(p.current_price)}</td>
       <td class="px-4 py-3.5 text-right font-semibold text-slate-800">$${fmt(p.current_value)}</td>
-      <td class="px-4 py-3.5 text-right ${glColor}">${(p.gain_loss||0) >= 0 ? "+" : ""}$${fmt(Math.abs(p.gain_loss||0))}</td>
+      <td class="px-4 py-3.5 text-right ${glColor}">${(p.gain_loss || 0) >= 0 ? "+" : ""}$${fmt(Math.abs(p.gain_loss || 0))}</td>
       <td class="px-4 py-3.5 text-right ${glColor}">${fmtPct(p.gain_loss_pct)}</td>
       <td class="px-4 py-3.5 text-right">
         <div class="flex justify-end gap-3">
-          <button onclick="openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes||"").replace(/'/g,"\\'")}')"\
+          <button onclick="openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes || "").replace(/'/g, "\\'")}')"\
             class="text-brand-500 text-xs font-medium hover:text-brand-700">Edit</button>
           <button onclick="deletePosition(${p.id})"\
             class="text-red-400 text-xs font-medium hover:text-red-600">Remove</button>
@@ -194,7 +220,7 @@ async function loadAnalysisHistory() {
 async function loadReport(dateStr) {
   if (!dateStr) return;
   const content = document.getElementById("analysis-content");
-  content.innerHTML = `<div class="space-y-4">${[1,2,3].map(() => `<div class="card p-5"><div class="skeleton h-4 rounded w-32 mb-3"></div><div class="skeleton h-3 rounded w-full mb-2"></div><div class="skeleton h-3 rounded w-3/4"></div></div>`).join("")}</div>`;
+  content.innerHTML = `<div class="space-y-4">${[1, 2, 3].map(() => `<div class="card p-5"><div class="skeleton h-4 rounded w-32 mb-3"></div><div class="skeleton h-3 rounded w-full mb-2"></div><div class="skeleton h-3 rounded w-3/4"></div></div>`).join("")}</div>`;
   try {
     const report = await api("GET", `/analysis/${dateStr}`);
     renderReport(report);
@@ -228,7 +254,7 @@ function renderReport(report) {
             ${pill(a.recommendation)}
             ${pill(a.confidence)}
           </div>
-          <p class="text-xs text-slate-400 mt-0.5">${recIcon[a.recommendation] || "⚪"} ${a.recommendation.replace(/_/g," ").toUpperCase()}</p>
+          <p class="text-xs text-slate-400 mt-0.5">${recIcon[a.recommendation] || "⚪"} ${a.recommendation.replace(/_/g, " ").toUpperCase()}</p>
         </div>
         <div class="text-right">
           <p class="text-xl font-bold text-slate-900">$${fmt(a.current_price)}</p>
@@ -254,7 +280,7 @@ function renderReport(report) {
           </div>
           <div class="flex justify-between">
             <span class="text-slate-400">Volume</span>
-            <span class="font-semibold ${(a.volume_ratio||1) > 1.2 ? 'text-brand-500' : 'text-slate-500'}">${a.volume_ratio != null ? a.volume_ratio + "×" : "—"}</span>
+            <span class="font-semibold ${(a.volume_ratio || 1) > 1.2 ? 'text-brand-500' : 'text-slate-500'}">${a.volume_ratio != null ? a.volume_ratio + "×" : "—"}</span>
           </div>
           <div class="flex justify-between">
             <span class="text-slate-400">SMA 20</span>
@@ -266,7 +292,7 @@ function renderReport(report) {
   }).join("");
 
   content.innerHTML = `
-    <div class="grid grid-cols-3 gap-4 mb-5">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
       <div class="card p-4 text-center">
         <p class="text-xs text-slate-400 mb-1">Portfolio Value</p>
         <p class="text-xl font-bold text-slate-900">$${fmt(s.total_value)}</p>

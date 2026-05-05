@@ -35,15 +35,20 @@ async def get_advice(body: AdvisorRequest, db: AsyncSession = Depends(get_db)):
         })
 
     async def event_stream():
-        full_text = []
-        async for chunk in ai_analysis.run_advisor_stream(
-            portfolio=portfolio,
-            budget_usd=body.budget_usd,
-            risk_level=body.risk_level,
-            sector_preference=body.sector_preference,
-            notes=body.notes,
-        ):
-            yield f"data: {chunk}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for chunk in ai_analysis.run_advisor_stream(
+                portfolio=portfolio,
+                budget_usd=body.budget_usd,
+                risk_level=body.risk_level,
+                sector_preference=body.sector_preference,
+                notes=body.notes,
+            ):
+                yield f"data: {chunk}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            import logging
+            logging.error(f"Advisor stream error: {e}")
+            yield f"data: Error: {str(e)}\n\n"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

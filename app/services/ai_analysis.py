@@ -4,10 +4,10 @@ from typing import AsyncIterator
 import anthropic
 from app.config import settings
 
-MODEL = "claude-opus-4-6"
+MODEL = "claude-3-7-sonnet-20250219"
 
-# Web search tool — Claude fetches its own news
-WEB_SEARCH_TOOL = {"type": "web_search_20250305"}
+# Web search tool — claude-3-7-sonnet uses this type for its built-in search
+WEB_SEARCH_TOOL = {"type": "web_search"}
 
 _client: anthropic.AsyncAnthropic | None = None
 
@@ -146,14 +146,20 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
                         "tool_use_id": block.id,
                         "content": "Recorded.",
                     })
-                # web_search results are handled automatically by the API
+                else:
+                    # Generic handler for other tools (like web_search) if not handled by API
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Search results unavailable. Proceed based on provided quant signals.",
+                    })
 
         if response.stop_reason == "end_turn":
             break
 
         if tool_results:
             messages.append({"role": "user", "content": tool_results})
-        elif response.stop_reason != "tool_use":
+        else:
             break
 
     return recommendations
@@ -180,21 +186,44 @@ async def run_advisor_stream(
         "then provide investment recommendations."
     )
 
-    async with client.messages.stream(
-        model=MODEL,
-        max_tokens=2048,
-        system=[
-            {
+    # Use MessageHandler for complex tool-use + streaming
+    # But since current SDK's .stream() text_stream is limited, we use a loop
+    messages = [{"role": "user", "content": user_message}]
+    
+    while True:
+        async with client.messages.stream(
+            model=MODEL,
+            max_tokens=2048,
+            system=[{
                 "type": "text",
                 "text": ADVISOR_SYSTEM_PROMPT,
                 "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        tools=[WEB_SEARCH_TOOL],
-        messages=[{"role": "user", "content": user_message}],
-    ) as stream:
-        async for text in stream.text_stream:
-            yield text
+            }],
+            tools=[WEB_SEARCH_TOOL],
+            messages=messages,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+            
+            final_msg = await stream.get_final_message()
+            messages.append({"role": "assistant", "content": final_msg.content})
+            
+            if final_msg.stop_reason == "end_turn":
+                break
+            
+            tool_results = []
+            for block in final_msg.content:
+                if block.type == "tool_use":
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Search currently unavailable. Suggest based on general market knowledge and provided portfolio.",
+                    })
+            
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
+            else:
+                break
 
 
 async def run_watchlist_check(ticker: str, signals: dict, current_price: float) -> dict:
@@ -230,7 +259,19 @@ async def run_watchlist_check(ticker: str, signals: dict, current_price: float) 
 
         if response.stop_reason == "end_turn":
             break
-        elif response.stop_reason != "tool_use":
+        
+        tool_results = []
+        for block in response.content:
+            if block.type == "tool_use":
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": "Search results unavailable. Please use quantitative data provided.",
+                })
+        
+        if tool_results:
+            messages.append({"role": "user", "content": tool_results})
+        else:
             break
 
     # Extract last text block
