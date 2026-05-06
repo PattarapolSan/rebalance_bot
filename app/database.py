@@ -21,6 +21,20 @@ async def init_db():
         from app.models import portfolio, analysis  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
         await _fix_fk_cascade(conn)
+        await _add_key_level_columns(conn)
+
+
+async def _add_key_level_columns(conn):
+    """Add support/resistance/stop_loss columns if they don't exist yet (idempotent)."""
+    from sqlalchemy import text
+    if "postgresql" not in settings.async_database_url:
+        return
+    for col in ("support", "resistance", "stop_loss"):
+        await conn.execute(text(f"""
+            DO $$ BEGIN
+                ALTER TABLE stock_analyses ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION;
+            END $$;
+        """))
 
 
 async def _fix_fk_cascade(conn):

@@ -7,15 +7,12 @@ class StockAnalysisResponse(BaseModel):
     id: int
     ticker: str
     current_price: float
-    rsi_14: Optional[float]
-    sma_20: Optional[float]
-    sma_50: Optional[float]
-    volume_ratio: Optional[float]
-    sma_cross: Optional[str]
-    news_headlines: List[str] = []
     recommendation: str
-    rationale: str
     confidence: str
+    rationale: str
+    support: Optional[float] = None
+    resistance: Optional[float] = None
+    stop_loss: Optional[float] = None
 
     model_config = {"from_attributes": True}
 

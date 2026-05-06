@@ -536,7 +536,7 @@ function renderReport(report) {
   const recIcon = { buy_more: "🟢", hold: "🟡", sell: "🔴" };
 
   const analyses = (report.analyses || []).map(a => {
-    const rsiPct = a.rsi_14 != null ? Math.min(100, Math.max(0, a.rsi_14)) : null;
+    const hasLevels = a.support != null || a.resistance != null || a.stop_loss != null;
     return `
     <div class="card p-5">
       <div class="flex items-start justify-between mb-3">
@@ -552,38 +552,40 @@ function renderReport(report) {
           <p class="text-xl font-bold text-slate-900">$${fmt(a.current_price)}</p>
         </div>
       </div>
-
-      <p class="text-sm text-slate-600 leading-relaxed mb-4 border-l-2 border-brand-100 pl-3">${a.rationale}</p>
-
-      ${a.rsi_14 != null ? `
-      <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-xs mt-2">
-        <div>
-          <div class="flex justify-between mb-1">
-            <span class="text-slate-400 font-medium">RSI (14)</span>
-            <span class="font-bold" style="color:${rsiColor(a.rsi_14)}">${a.rsi_14}</span>
-          </div>
-          <div class="rsi-bar"><div class="rsi-fill" style="width:${rsiPct}%; background:${rsiColor(a.rsi_14)}"></div></div>
-          <p class="text-slate-300 mt-0.5">${a.rsi_14 < 30 ? "Oversold" : a.rsi_14 > 70 ? "Overbought" : "Neutral"}</p>
-        </div>
-        <div class="space-y-1.5">
-          <div class="flex justify-between">
-            <span class="text-slate-400">Trend</span>
-            <span class="font-semibold ${a.sma_cross === 'bullish' ? 'text-green-500' : 'text-red-400'}">${a.sma_cross === 'bullish' ? '▲ Bullish' : '▼ Bearish'}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">Volume</span>
-            <span class="font-semibold ${(a.volume_ratio || 1) > 1.2 ? 'text-brand-500' : 'text-slate-500'}">${a.volume_ratio != null ? a.volume_ratio + "×" : "—"}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">SMA 20</span>
-            <span class="font-medium text-slate-600">$${fmt(a.sma_20)}</span>
-          </div>
-        </div>
+      <p class="text-sm text-slate-600 leading-relaxed border-l-2 border-brand-100 pl-3 mb-3">${a.rationale}</p>
+      ${hasLevels ? `
+      <div class="flex gap-3 flex-wrap pt-3 border-t border-slate-50">
+        ${a.support != null ? `
+        <div class="flex items-center gap-1.5 bg-green-50 rounded-lg px-3 py-1.5">
+          <span class="w-2 h-2 rounded-full bg-green-400"></span>
+          <span class="text-xs text-slate-500">Support</span>
+          <span class="text-xs font-bold text-green-700">$${fmt(a.support)}</span>
+        </div>` : ""}
+        ${a.resistance != null ? `
+        <div class="flex items-center gap-1.5 bg-red-50 rounded-lg px-3 py-1.5">
+          <span class="w-2 h-2 rounded-full bg-red-400"></span>
+          <span class="text-xs text-slate-500">Resistance</span>
+          <span class="text-xs font-bold text-red-600">$${fmt(a.resistance)}</span>
+        </div>` : ""}
+        ${a.stop_loss != null ? `
+        <div class="flex items-center gap-1.5 bg-orange-50 rounded-lg px-3 py-1.5">
+          <span class="w-2 h-2 rounded-full bg-orange-400"></span>
+          <span class="text-xs text-slate-500">Stop Loss</span>
+          <span class="text-xs font-bold text-orange-600">$${fmt(a.stop_loss)}</span>
+        </div>` : ""}
       </div>` : ""}
     </div>`;
   }).join("");
 
+  const generatedAt = report.generated_at
+    ? new Date(report.generated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : null;
+
   content.innerHTML = `
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold text-slate-700">${report.report_date}</h2>
+      ${generatedAt ? `<span class="text-xs text-slate-400">Generated ${generatedAt}</span>` : ""}
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
       <div class="card p-4 text-center">
         <p class="text-xs text-slate-400 mb-1">Portfolio Value</p>
@@ -617,6 +619,10 @@ async function getAdvice() {
   const risk = document.getElementById("advisor-risk").value;
   const sector = document.getElementById("advisor-sector").value.trim() || null;
   const notes = document.getElementById("advisor-notes").value.trim() || null;
+  const interestsRaw = document.getElementById("advisor-interests").value.trim();
+  const stocks_of_interest = interestsRaw
+    ? interestsRaw.split(",").map(s => s.trim().toUpperCase()).filter(Boolean)
+    : null;
 
   if (isNaN(budget) || budget <= 0) return toast("Enter a valid budget.", true);
 
@@ -629,7 +635,7 @@ async function getAdvice() {
     const res = await fetch(`${API}/advisor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ budget_usd: budget, risk_level: risk, sector_preference: sector, notes }),
+      body: JSON.stringify({ budget_usd: budget, risk_level: risk, sector_preference: sector, notes, stocks_of_interest }),
     });
 
     const reader = res.body.getReader();

@@ -7,9 +7,8 @@ from app.config import settings
 
 scheduler = AsyncIOScheduler()
 
-# Thresholds that force a run even on a "skip" day
+# Threshold that forces a run even on a "skip" day
 PRICE_MOVE_THRESHOLD_PCT = 5.0   # any stock moved ±5% since last report → run
-RSI_EXTREME_THRESHOLD = (28, 72) # RSI entered oversold/overbought zone → run
 
 
 async def _should_skip(db, positions, quotes) -> tuple[bool, str]:
@@ -18,7 +17,6 @@ async def _should_skip(db, positions, quotes) -> tuple[bool, str]:
     Skip only if:
       - A report already ran within the last 24 hours, AND
       - No position has moved more than PRICE_MOVE_THRESHOLD_PCT since that report, AND
-      - No position has an extreme RSI, AND
       - No new positions were added since that report.
     """
     from app.models.analysis import DailyReport, StockAnalysis
@@ -67,10 +65,6 @@ async def _should_skip(db, positions, quotes) -> tuple[bool, str]:
         if move_pct >= PRICE_MOVE_THRESHOLD_PCT:
             return False, f"{pos.ticker} moved {move_pct:.1f}% since last report"
 
-        rsi = last.rsi_14
-        if rsi is not None and (rsi <= RSI_EXTREME_THRESHOLD[0] or rsi >= RSI_EXTREME_THRESHOLD[1]):
-            return False, f"{pos.ticker} RSI at extreme ({rsi})"
-
     return True, "portfolio stable — skipping to save cost"
 
 
@@ -82,7 +76,7 @@ async def run_daily_analysis(force: bool = False):
     from app.database import AsyncSessionLocal
     from app.models.portfolio import Position
     from app.models.analysis import DailyReport, StockAnalysis
-    from app.services import market_data, quant_signals, ai_analysis
+    from app.services import market_data, ai_analysis
     from sqlalchemy import select
 
     async with AsyncSessionLocal() as db:
@@ -113,9 +107,6 @@ async def run_daily_analysis(force: bool = False):
             portfolio_value += current_value
             portfolio_cost += cost_basis
 
-            hist = await market_data.get_history(pos.ticker, "3mo")
-            signals = quant_signals.compute(hist) if not hist.empty else {}
-
             positions_data.append({
                 "ticker": pos.ticker,
                 "quantity": pos.quantity,
@@ -123,8 +114,7 @@ async def run_daily_analysis(force: bool = False):
                 "current_price": current_price,
                 "current_value": current_value,
                 "gain_loss": gain_loss,
-                "gain_loss_pct": (gain_loss / cost_basis * 100) if cost_basis else 0,
-                "signals": signals,
+                "gain_loss_pct": round((gain_loss / cost_basis * 100), 2) if cost_basis else 0,
                 "company_name": q.get("name", pos.ticker),
             })
 
@@ -165,15 +155,12 @@ async def run_daily_analysis(force: bool = False):
                 report_id=report.id,
                 ticker=ticker,
                 current_price=pd_item["current_price"],
-                rsi_14=pd_item["signals"].get("rsi_14"),
-                sma_20=pd_item["signals"].get("sma_20"),
-                sma_50=pd_item["signals"].get("sma_50"),
-                volume_ratio=pd_item["signals"].get("volume_ratio"),
-                sma_cross=pd_item["signals"].get("sma_cross"),
-                news_headlines=json.dumps([]),
                 recommendation=rec.get("action", "hold"),
                 rationale=rec.get("rationale", ""),
                 confidence=rec.get("confidence", "medium"),
+                support=rec.get("support"),
+                resistance=rec.get("resistance"),
+                stop_loss=rec.get("stop_loss"),
             ))
 
         await db.commit()

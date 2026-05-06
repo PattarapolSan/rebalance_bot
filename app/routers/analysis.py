@@ -1,4 +1,3 @@
-import json
 from datetime import date
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -21,24 +20,16 @@ def _build_report_response(report: DailyReport, analyses: list[StockAnalysis]) -
 
     stock_responses = []
     for a in analyses:
-        headlines = []
-        try:
-            headlines = json.loads(a.news_headlines) if a.news_headlines else []
-        except Exception:
-            pass
         stock_responses.append(StockAnalysisResponse(
             id=a.id,
             ticker=a.ticker,
             current_price=a.current_price,
-            rsi_14=a.rsi_14,
-            sma_20=a.sma_20,
-            sma_50=a.sma_50,
-            volume_ratio=a.volume_ratio,
-            sma_cross=a.sma_cross,
-            news_headlines=headlines,
             recommendation=a.recommendation,
-            rationale=a.rationale,
             confidence=a.confidence,
+            rationale=a.rationale,
+            support=a.support,
+            resistance=a.resistance,
+            stop_loss=a.stop_loss,
         ))
 
     return DailyReportResponse(

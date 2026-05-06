@@ -42,6 +42,7 @@ async def get_advice(body: AdvisorRequest, db: AsyncSession = Depends(get_db)):
                 risk_level=body.risk_level,
                 sector_preference=body.sector_preference,
                 notes=body.notes,
+                stocks_of_interest=body.stocks_of_interest,
             ):
                 yield f"data: {chunk}\n\n"
             yield "data: [DONE]\n\n"

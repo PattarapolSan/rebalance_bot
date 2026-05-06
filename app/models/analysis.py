@@ -20,12 +20,9 @@ class StockAnalysis(Base):
     report_id: Mapped[int] = mapped_column(Integer, ForeignKey("daily_reports.id", ondelete="CASCADE"), nullable=False)
     ticker: Mapped[str] = mapped_column(String(10), nullable=False)
     current_price: Mapped[float] = mapped_column(Float, nullable=False)
-    rsi_14: Mapped[float] = mapped_column(Float, nullable=True)
-    sma_20: Mapped[float] = mapped_column(Float, nullable=True)
-    sma_50: Mapped[float] = mapped_column(Float, nullable=True)
-    volume_ratio: Mapped[float] = mapped_column(Float, nullable=True)
-    sma_cross: Mapped[str] = mapped_column(String(10), nullable=True)
-    news_headlines: Mapped[str] = mapped_column(Text, default="")  # JSON list
     recommendation: Mapped[str] = mapped_column(String(20), nullable=False)  # buy_more | hold | sell
+    confidence: Mapped[str] = mapped_column(String(10), default="medium")
     rationale: Mapped[str] = mapped_column(Text, default="")
-    confidence: Mapped[str] = mapped_column(String(10), default="medium")  # high | medium | low
+    support: Mapped[float] = mapped_column(Float, nullable=True)
+    resistance: Mapped[float] = mapped_column(Float, nullable=True)
+    stop_loss: Mapped[float] = mapped_column(Float, nullable=True)
