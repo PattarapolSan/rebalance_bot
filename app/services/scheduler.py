@@ -173,6 +173,7 @@ def start_scheduler():
         CronTrigger(
             hour=settings.analysis_schedule_hour,
             minute=settings.analysis_schedule_minute,
+            timezone="Asia/Bangkok",
         ),
         id="daily_analysis",
         replace_existing=True,

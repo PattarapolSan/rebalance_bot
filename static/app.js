@@ -62,12 +62,19 @@ function switchPortfolioView(view) {
 }
 
 function renderAnalyticsView(positions) {
-  if (!positions || positions.length === 0) return;
+  const allocEl = document.getElementById("analytics-allocation");
+  const perfEl = document.getElementById("analytics-performance");
+
+  if (!positions || positions.length === 0) {
+    const empty = '<p class="text-slate-400 text-sm italic py-4">No positions yet — add some from the Portfolio tab.</p>';
+    if (allocEl) allocEl.innerHTML = empty;
+    if (perfEl) perfEl.innerHTML = empty;
+    return;
+  }
 
   const totalValue = positions.reduce((s, p) => s + (p.current_value || 0), 0);
 
   // ── Allocation table ──
-  const allocEl = document.getElementById("analytics-allocation");
   if (allocEl) {
     const sorted = [...positions].sort((a, b) => (b.current_value || 0) - (a.current_value || 0));
     allocEl.innerHTML = sorted.map(p => {
@@ -89,7 +96,6 @@ function renderAnalyticsView(positions) {
   }
 
   // ── Top / Bottom performers ──
-  const perfEl = document.getElementById("analytics-performance");
   if (perfEl) {
     const sorted = [...positions].sort((a, b) => (b.gain_loss_pct || 0) - (a.gain_loss_pct || 0));
     perfEl.innerHTML = sorted.map(p => {
@@ -450,10 +456,18 @@ function renderReport(report) {
     ? new Date(report.generated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
     : null;
 
+  const hasRealAnalysis = (report.analyses || []).some(a => a.rationale && a.rationale !== "No analysis available.");
+  const analysisStatus = hasRealAnalysis
+    ? `<span class="inline-flex items-center gap-1 text-xs font-semibold text-green-600 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full">✓ AI analysis complete</span>`
+    : `<span class="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-full">⚠ AI data unavailable — run again</span>`;
+
   content.innerHTML = `
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-base font-semibold text-slate-700">${report.report_date}</h2>
-      ${generatedAt ? `<span class="text-xs text-slate-400">Generated ${generatedAt}</span>` : ""}
+    <div class="mb-4">
+      <div class="flex flex-wrap items-center gap-2 mb-1">
+        <h2 class="text-base font-semibold text-slate-700">${report.report_date}</h2>
+        ${analysisStatus}
+      </div>
+      ${generatedAt ? `<p class="text-xs text-slate-400">Generated ${generatedAt}</p>` : ""}
     </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
       <div class="card p-4 text-center">

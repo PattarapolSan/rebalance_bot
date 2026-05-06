@@ -12,6 +12,9 @@ WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search"}
 
 _client: anthropic.AsyncAnthropic | None = None
 
+# Debug: store last daily report run info
+_last_run: dict = {"status": "never", "stop_reason": None, "text_preview": "", "error": None}
+
 
 def get_client() -> anthropic.AsyncAnthropic:
     global _client
@@ -102,6 +105,7 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
             messages=[{"role": "user", "content": user_message}],
         )
     except Exception as e:
+        _last_run.update({"status": "api_error", "error": str(e), "stop_reason": None, "text_preview": ""})
         logging.error(f"Daily report API error: {e}")
         return []
 
@@ -109,17 +113,22 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
     all_text = "\n".join(
         block.text for block in response.content if hasattr(block, "text")
     )
-    logging.info(f"[daily_report] stop_reason={response.stop_reason} text_len={len(all_text)}")
-    logging.debug(f"[daily_report] raw response text: {all_text[:500]}")
+    block_types = [type(b).__name__ for b in response.content]
+    logging.info(f"[daily_report] stop_reason={response.stop_reason} text_len={len(all_text)} blocks={block_types}")
+
+    _last_run.update({
+        "stop_reason": response.stop_reason,
+        "text_preview": all_text[:600],
+        "block_types": str(block_types),
+        "error": None,
+    })
 
     # Try to extract a JSON array: look for the first '[' ... last ']'
     def _extract_json_array(s: str) -> str:
-        # Strip markdown fences
         if "```" in s:
             m = re.search(r"```(?:json)?\s*([\s\S]*?)```", s)
             if m:
                 return m.group(1).strip()
-        # Find outermost [...] array
         start = s.find("[")
         end = s.rfind("]")
         if start != -1 and end != -1 and end > start:
@@ -132,10 +141,13 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
         results = json.loads(text)
         for r in results:
             r["ticker"] = r.get("ticker", "").upper()
+        _last_run["status"] = f"ok:{len(results)} stocks"
         logging.info(f"[daily_report] parsed {len(results)} results")
         return results
     except json.JSONDecodeError:
-        logging.error(f"[daily_report] JSON parse failed. Extracted text: {text[:500]}")
+        _last_run["status"] = f"json_parse_failed"
+        _last_run["error"] = f"Extracted: {text[:300]}"
+        logging.error(f"[daily_report] JSON parse failed. text: {text[:500]}")
         return []
 
 

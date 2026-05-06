@@ -91,7 +91,8 @@ async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_d
 
 @router.get("/status")
 async def analysis_status():
-    return _analysis_state
+    from app.services.ai_analysis import _last_run
+    return {**_analysis_state, "last_run": _last_run}
 
 
 async def _run_with_status():
