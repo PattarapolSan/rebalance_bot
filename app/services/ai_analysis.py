@@ -1,6 +1,7 @@
 """AI analysis using Claude with built-in web search. Single-call architecture."""
 import json
 import logging
+import re
 from typing import AsyncIterator
 import anthropic
 from app.config import settings
@@ -104,30 +105,37 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
         logging.error(f"Daily report API error: {e}")
         return []
 
-    # Extract the JSON text block from the response
-    text = ""
-    for block in response.content:
-        if hasattr(block, "text") and block.text.strip().startswith("["):
-            text = block.text.strip()
-            break
-        elif hasattr(block, "text"):
-            text = block.text  # keep last text block as fallback
+    # Collect all text blocks from the response
+    all_text = "\n".join(
+        block.text for block in response.content if hasattr(block, "text")
+    )
+    logging.info(f"[daily_report] stop_reason={response.stop_reason} text_len={len(all_text)}")
+    logging.debug(f"[daily_report] raw response text: {all_text[:500]}")
 
-    # Strip markdown fences if present
-    if "```" in text:
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    text = text.strip()
+    # Try to extract a JSON array: look for the first '[' ... last ']'
+    def _extract_json_array(s: str) -> str:
+        # Strip markdown fences
+        if "```" in s:
+            m = re.search(r"```(?:json)?\s*([\s\S]*?)```", s)
+            if m:
+                return m.group(1).strip()
+        # Find outermost [...] array
+        start = s.find("[")
+        end = s.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            return s[start:end + 1]
+        return s.strip()
+
+    text = _extract_json_array(all_text)
 
     try:
         results = json.loads(text)
-        # Normalise ticker case
         for r in results:
             r["ticker"] = r.get("ticker", "").upper()
+        logging.info(f"[daily_report] parsed {len(results)} results")
         return results
     except json.JSONDecodeError:
-        logging.error(f"Failed to parse daily report JSON: {text[:300]}")
+        logging.error(f"[daily_report] JSON parse failed. Extracted text: {text[:500]}")
         return []
 
 

@@ -6,18 +6,41 @@ import pandas as pd
 
 def _get_quote_sync(ticker: str) -> dict:
     t = yf.Ticker(ticker)
-    info = t.info
-    price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose", 0)
+    # fast_info is reliable; fall back to a 5-day download if needed
+    price = 0.0
+    name = ticker
+    market_cap = None
+    try:
+        fi = t.fast_info
+        price = float(fi.last_price or fi.previous_close or 0)
+        market_cap = getattr(fi, "market_cap", None)
+        name = ticker  # fast_info has no display name
+    except Exception:
+        pass
+
+    if price == 0:
+        try:
+            df = yf.download(ticker, period="5d", auto_adjust=True, progress=False)
+            if not df.empty:
+                price = float(df["Close"].iloc[-1])
+        except Exception:
+            pass
+
+    # Try to get display name and extra fields from info (best-effort, non-blocking)
+    try:
+        info = t.info
+        name = info.get("longName") or info.get("shortName") or ticker
+        if price == 0:
+            price = float(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or 0)
+        market_cap = market_cap or info.get("marketCap")
+    except Exception:
+        pass
+
     return {
         "ticker": ticker.upper(),
-        "price": float(price or 0),
-        "name": info.get("longName") or info.get("shortName", ticker),
-        "market_cap": info.get("marketCap"),
-        "pe_ratio": info.get("trailingPE"),
-        "52w_high": info.get("fiftyTwoWeekHigh"),
-        "52w_low": info.get("fiftyTwoWeekLow"),
-        "sector": info.get("sector"),
-        "industry": info.get("industry"),
+        "price": price,
+        "name": name,
+        "market_cap": market_cap,
     }
 
 

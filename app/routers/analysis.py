@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -9,6 +10,14 @@ from app.models.analysis import DailyReport, StockAnalysis
 from app.schemas.analysis import DailyReportResponse, StockAnalysisResponse
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
+
+# Simple in-memory run state
+_analysis_state: dict = {"running": False, "message": "idle"}
+
+
+def _set_state(running: bool, message: str):
+    _analysis_state["running"] = running
+    _analysis_state["message"] = message
 
 
 def _build_report_response(report: DailyReport, analyses: list[StockAnalysis]) -> DailyReportResponse:
@@ -80,8 +89,28 @@ async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_d
     return _build_report_response(report, list(analyses))
 
 
+@router.get("/status")
+async def analysis_status():
+    return _analysis_state
+
+
+async def _run_with_status():
+    _set_state(True, "Fetching market prices…")
+    try:
+        from app.services.scheduler import run_daily_analysis
+        # Monkey-patch scheduler to update message at key steps
+        import app.routers.analysis as _self
+        _self._analysis_state["message"] = "Claude is searching the web for each stock…"
+        await run_daily_analysis(force=True)
+        _set_state(False, "done")
+    except Exception as e:
+        _set_state(False, f"error: {e}")
+
+
 @router.post("/trigger", status_code=202)
 async def trigger_analysis(background_tasks: BackgroundTasks):
-    from app.services.scheduler import run_daily_analysis
-    background_tasks.add_task(run_daily_analysis, True)  # force=True skips stability check
-    return {"message": "Analysis triggered in background"}
+    if _analysis_state["running"]:
+        return {"message": "Analysis already running"}
+    _set_state(True, "Starting…")
+    background_tasks.add_task(_run_with_status)
+    return {"message": "Analysis triggered"}

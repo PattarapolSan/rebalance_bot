@@ -1,7 +1,5 @@
 const API = "/api/v1";
 let currentPortfolio = [];
-let allocationChart = null;
-
 function toggleAddForm() {
   const container = document.getElementById("add-form-container");
   const icon = document.getElementById("toggle-icon");
@@ -44,31 +42,74 @@ function showTab(name) {
 function switchPortfolioView(view) {
   const isList = view === 'list';
   document.getElementById("view-content-list").classList.toggle("hidden", !isList);
-  document.getElementById("view-content-charts").classList.toggle("hidden", isList);
+  document.getElementById("view-content-analytics").classList.toggle("hidden", isList);
 
-  // Toggle tab buttons
   const listBtn = document.getElementById("view-tab-list");
-  const chartsBtn = document.getElementById("view-tab-charts");
+  const analyticsBtn = document.getElementById("view-tab-charts");
 
   if (isList) {
     listBtn.classList.add("bg-white", "text-slate-900", "shadow-sm");
     listBtn.classList.remove("text-slate-500");
-    chartsBtn.classList.remove("bg-white", "text-slate-900", "shadow-sm");
-    chartsBtn.classList.add("text-slate-500");
+    analyticsBtn.classList.remove("bg-white", "text-slate-900", "shadow-sm");
+    analyticsBtn.classList.add("text-slate-500");
   } else {
-    chartsBtn.classList.add("bg-white", "text-slate-900", "shadow-sm");
-    chartsBtn.classList.remove("text-slate-500");
+    analyticsBtn.classList.add("bg-white", "text-slate-900", "shadow-sm");
+    analyticsBtn.classList.remove("text-slate-500");
     listBtn.classList.remove("bg-white", "text-slate-900", "shadow-sm");
     listBtn.classList.add("text-slate-500");
+    renderAnalyticsView(currentPortfolio);
+  }
+}
 
-    // Refresh charts when switching to charts view
-    if (currentPortfolio.length > 0) {
-      setTimeout(() => {
-        updateAllocationChart(currentPortfolio);
-        updatePerformanceChart(currentPortfolio);
-        updateReturnChart(currentPortfolio);
-      }, 0);
-    }
+function renderAnalyticsView(positions) {
+  if (!positions || positions.length === 0) return;
+
+  const totalValue = positions.reduce((s, p) => s + (p.current_value || 0), 0);
+
+  // ── Allocation table ──
+  const allocEl = document.getElementById("analytics-allocation");
+  if (allocEl) {
+    const sorted = [...positions].sort((a, b) => (b.current_value || 0) - (a.current_value || 0));
+    allocEl.innerHTML = sorted.map(p => {
+      const pct = totalValue > 0 ? (p.current_value / totalValue * 100) : 0;
+      const barW = Math.round(pct);
+      const isGain = (p.gain_loss || 0) >= 0;
+      return `
+        <div class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
+          <span class="w-14 text-xs font-bold text-slate-700 shrink-0">${p.ticker}</span>
+          <div class="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div class="h-2 rounded-full bg-brand-400" style="width:${barW}%"></div>
+          </div>
+          <span class="w-10 text-right text-xs font-semibold text-slate-600 shrink-0">${pct.toFixed(1)}%</span>
+          <span class="w-20 text-right text-xs font-bold shrink-0 ${isGain ? 'text-green-600' : 'text-red-500'}">
+            $${fmt(p.current_value || 0)}
+          </span>
+        </div>`;
+    }).join("");
+  }
+
+  // ── Top / Bottom performers ──
+  const perfEl = document.getElementById("analytics-performance");
+  if (perfEl) {
+    const sorted = [...positions].sort((a, b) => (b.gain_loss_pct || 0) - (a.gain_loss_pct || 0));
+    perfEl.innerHTML = sorted.map(p => {
+      const pct = p.gain_loss_pct || 0;
+      const isGain = pct >= 0;
+      const bar = Math.min(Math.abs(pct), 100);
+      return `
+        <div class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
+          <span class="w-14 text-xs font-bold text-slate-700 shrink-0">${p.ticker}</span>
+          <div class="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div class="h-2 rounded-full ${isGain ? 'bg-green-400' : 'bg-red-400'}" style="width:${bar}%"></div>
+          </div>
+          <span class="w-16 text-right text-xs font-bold shrink-0 ${isGain ? 'text-green-600' : 'text-red-500'}">
+            ${isGain ? '+' : ''}${pct.toFixed(2)}%
+          </span>
+          <span class="w-20 text-right text-xs text-slate-400 shrink-0">
+            ${isGain ? '+' : ''}$${fmt(Math.abs(p.gain_loss || 0))}
+          </span>
+        </div>`;
+    }).join("");
   }
 }
 
@@ -163,178 +204,6 @@ function renderPortfolio(positions) {
   // Render Mobile List
   renderMobileList(validPositions, mobileList);
 
-  // Update Charts - Wrap in try-catch to prevent breaking list rendering
-  try {
-    updateAllocationChart(validPositions);
-    updatePerformanceChart(validPositions);
-    updateReturnChart(validPositions);
-  } catch (e) {
-    console.error("Chart Rendering Error:", e);
-  }
-}
-
-let performanceChart = null;
-
-function updatePerformanceChart(positions) {
-  const canvas = document.getElementById('performanceChart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  if (performanceChart) {
-    performanceChart.destroy();
-  }
-
-  if (positions.length === 0) return;
-
-  const data = {
-    labels: positions.map(p => p.ticker),
-    datasets: [{
-      label: 'Gains/Losses ($)',
-      data: positions.map(p => p.gain_loss),
-      backgroundColor: positions.map(p => (p.gain_loss >= 0 ? '#10b981' : '#f43f5e')),
-      borderRadius: 6,
-    }]
-  };
-
-  performanceChart = new Chart(ctx, {
-    type: 'bar',
-    data: data,
-    options: {
-      indexAxis: 'y',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (item) => ` P&L: ${item.raw >= 0 ? '+' : ''}$${fmt(item.raw)}`
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { callback: (val) => (val >= 0 ? '+' : '') + '$' + val }
-        },
-        y: {
-          grid: { display: false }
-        }
-      },
-      responsive: true,
-      maintainAspectRatio: false
-    }
-  });
-}
-
-let returnChart = null;
-
-function updateReturnChart(positions) {
-  const canvas = document.getElementById('returnChart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  if (returnChart) {
-    returnChart.destroy();
-  }
-
-  if (positions.length === 0) return;
-
-  // Use gain_loss_pct from backend
-  const sorted = [...positions].sort((a, b) => (b.gain_loss_pct || 0) - (a.gain_loss_pct || 0));
-
-  const data = {
-    labels: sorted.map(p => p.ticker),
-    datasets: [{
-      label: 'Return (%)',
-      data: sorted.map(p => p.gain_loss_pct || 0),
-      backgroundColor: sorted.map(p => ((p.gain_loss_pct || 0) >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)')),
-      borderColor: sorted.map(p => ((p.gain_loss_pct || 0) >= 0 ? '#10b981' : '#f43f5e')),
-      borderWidth: 2,
-      borderRadius: 4,
-    }]
-  };
-
-  returnChart = new Chart(ctx, {
-    type: 'bar',
-    data: data,
-    options: {
-      indexAxis: 'y',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (item) => ` Return: ${item.raw >= 0 ? '+' : ''}${item.raw.toFixed(2)}%`
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: '#f1f5f9' },
-          ticks: { callback: (val) => val + '%' }
-        },
-        y: {
-          grid: { display: false }
-        }
-      },
-      responsive: true,
-      maintainAspectRatio: false
-    }
-  });
-}
-
-function updateAllocationChart(positions) {
-  const canvas = document.getElementById('allocationChart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const legendContainer = document.getElementById('chart-legend');
-
-  if (allocationChart) {
-    allocationChart.destroy();
-  }
-
-  if (positions.length === 0) {
-    legendContainer.innerHTML = "";
-    return;
-  }
-
-  // Predefined colors
-  const colors = [
-    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6',
-    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'
-  ];
-
-  const data = {
-    labels: positions.map(p => p.ticker),
-    datasets: [{
-      data: positions.map(p => p.current_value),
-      backgroundColor: colors.slice(0, positions.length),
-      borderWidth: 0,
-      hoverOffset: 4
-    }]
-  };
-
-  // Generate legend HTML
-  legendContainer.innerHTML = positions.map((p, i) => `
-    <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100">
-      <span class="w-2 h-2 rounded-full" style="background-color: ${colors[i % colors.length]}"></span>
-      <span class="text-[9px] font-bold text-slate-600 uppercase tracking-tighter">${p.ticker}</span>
-    </div>
-  `).join("");
-
-  allocationChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: data,
-    options: {
-      cutout: '70%',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (item) => ` ${item.label}: $${fmt(item.raw)}`
-          }
-        }
-      },
-      maintainAspectRatio: false
-    }
-  });
 }
 
 function renderDesktopTable(positions, tbody) {
@@ -604,12 +473,66 @@ function renderReport(report) {
 }
 
 async function triggerAnalysis() {
+  const btn = document.querySelector('[onclick="triggerAnalysis()"]');
   try {
     await api("POST", "/analysis/trigger");
-    toast("Analysis running in background — check back in a minute");
+    showAnalysisProgress(btn);
   } catch (e) {
     toast(e.message, true);
   }
+}
+
+function showAnalysisProgress(btn) {
+  // Show a persistent status bar above the analysis content
+  let bar = document.getElementById("analysis-status-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "analysis-status-bar";
+    bar.className = "flex items-center gap-3 px-4 py-3 mb-4 rounded-xl bg-brand-50 border border-brand-200 text-brand-700 text-sm font-medium";
+    const content = document.getElementById("analysis-content");
+    content.parentElement.insertBefore(bar, content);
+  }
+
+  const steps = [
+    "Fetching market prices…",
+    "Claude is searching the web for each stock…",
+    "Analysing technicals and news…",
+    "Generating recommendations…",
+  ];
+  let stepIdx = 0;
+
+  function updateBar(msg) {
+    bar.innerHTML = `
+      <svg class="animate-spin w-4 h-4 shrink-0 text-brand-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      <span>${msg}</span>`;
+  }
+
+  updateBar(steps[0]);
+  if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
+
+  const poll = setInterval(async () => {
+    try {
+      const s = await api("GET", "/analysis/status");
+      if (!s.running) {
+        clearInterval(poll);
+        bar.remove();
+        if (btn) { btn.disabled = false; btn.innerHTML = "▶ Run Now"; }
+        if (s.message === "done") {
+          toast("Analysis complete!");
+          loadAnalysisHistory();
+        } else {
+          toast(s.message || "Analysis finished", s.message?.startsWith("error"));
+        }
+        return;
+      }
+      // Cycle through steps while running
+      updateBar(s.message || steps[stepIdx % steps.length]);
+      stepIdx++;
+    } catch (_) {}
+  }, 3000);
 }
 
 // ── ADVISOR ──────────────────────────────────────────────────────────────────
@@ -629,7 +552,30 @@ async function getAdvice() {
   const result = document.getElementById("advisor-result");
   const output = document.getElementById("advisor-output");
   result.classList.remove("hidden");
-  output.innerHTML = `<span class="text-slate-400 animate-pulse">Searching market data and preparing suggestions…</span>`;
+
+  const thinkingHTML = `
+    <div id="advisor-thinking" class="flex items-center gap-3 text-slate-500 text-sm">
+      <svg class="animate-spin w-4 h-4 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      <span id="advisor-thinking-text" class="animate-pulse">Searching market data…</span>
+    </div>`;
+  output.innerHTML = thinkingHTML;
+
+  // Cycle thinking messages while waiting for first token
+  const thinkingMsgs = [
+    "Searching market data…",
+    "Fetching technicals and news…",
+    "Analysing your portfolio…",
+    "Crafting recommendations…",
+  ];
+  let msgIdx = 0;
+  const thinkingTimer = setInterval(() => {
+    msgIdx = (msgIdx + 1) % thinkingMsgs.length;
+    const el = document.getElementById("advisor-thinking-text");
+    if (el) el.textContent = thinkingMsgs[msgIdx];
+  }, 3000);
 
   try {
     const res = await fetch(`${API}/advisor`, {
@@ -641,7 +587,7 @@ async function getAdvice() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let text = "";
-    output.textContent = "";
+    let firstToken = true;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -651,12 +597,20 @@ async function getAdvice() {
         if (line.startsWith("data: ")) {
           const data = line.slice(6);
           if (data === "[DONE]") break;
+          if (firstToken) {
+            firstToken = false;
+            clearInterval(thinkingTimer);
+            output.textContent = "";
+          }
           text += data;
           output.textContent = text;
         }
       }
     }
+    clearInterval(thinkingTimer);
+    if (firstToken) output.textContent = "No response received.";
   } catch (e) {
+    clearInterval(thinkingTimer);
     output.textContent = `Error: ${e.message}`;
   }
 }
