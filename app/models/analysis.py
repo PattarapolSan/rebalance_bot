@@ -17,7 +17,7 @@ class StockAnalysis(Base):
     __tablename__ = "stock_analyses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    report_id: Mapped[int] = mapped_column(Integer, ForeignKey("daily_reports.id"), nullable=False)
+    report_id: Mapped[int] = mapped_column(Integer, ForeignKey("daily_reports.id", ondelete="CASCADE"), nullable=False)
     ticker: Mapped[str] = mapped_column(String(10), nullable=False)
     current_price: Mapped[float] = mapped_column(Float, nullable=False)
     rsi_14: Mapped[float] = mapped_column(Float, nullable=True)

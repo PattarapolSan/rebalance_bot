@@ -4,7 +4,7 @@ from typing import AsyncIterator
 import anthropic
 from app.config import settings
 
-MODEL = "claude-3-5-sonnet-20241022"
+MODEL = "claude-sonnet-4-6"
 
 # Web search tool — must use versioned tag as per API error
 WEB_SEARCH_TOOL = {
