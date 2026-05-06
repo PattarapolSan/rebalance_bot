@@ -17,6 +17,7 @@
       }
     }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -40,9 +41,18 @@
     }
 
     #advisor-output {
-      white-space: pre-wrap;
       line-height: 1.7;
     }
+    #advisor-output h1, #advisor-output h2, #advisor-output h3 {
+      font-weight: 700; margin-top: 1.1em; margin-bottom: 0.3em; color: #1e293b;
+    }
+    #advisor-output h2 { font-size: 1rem; }
+    #advisor-output h3 { font-size: 0.9rem; color: #475569; }
+    #advisor-output p { margin-bottom: 0.6em; }
+    #advisor-output ul, #advisor-output ol { padding-left: 1.4em; margin-bottom: 0.6em; }
+    #advisor-output li { margin-bottom: 0.25em; }
+    #advisor-output strong { font-weight: 700; color: #0f172a; }
+    #advisor-output hr { border: none; border-top: 1px solid #e2e8f0; margin: 1em 0; }
 
     .skeleton {
       background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);

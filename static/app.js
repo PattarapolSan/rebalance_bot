@@ -588,6 +588,16 @@ async function getAdvice() {
     const decoder = new TextDecoder();
     let text = "";
     let firstToken = true;
+    let renderPending = false;
+
+    function renderMd() {
+      renderPending = false;
+      if (typeof marked !== "undefined") {
+        output.innerHTML = marked.parse(text);
+      } else {
+        output.textContent = text;
+      }
+    }
 
     while (true) {
       const { done, value } = await reader.read();
@@ -600,15 +610,23 @@ async function getAdvice() {
           if (firstToken) {
             firstToken = false;
             clearInterval(thinkingTimer);
-            output.textContent = "";
+            output.innerHTML = "";
           }
           text += data;
-          output.textContent = text;
+          // Debounce rendering to ~4 times/sec
+          if (!renderPending) {
+            renderPending = true;
+            setTimeout(renderMd, 250);
+          }
         }
       }
     }
     clearInterval(thinkingTimer);
-    if (firstToken) output.textContent = "No response received.";
+    if (firstToken) {
+      output.textContent = "No response received.";
+    } else {
+      renderMd(); // Final render
+    }
   } catch (e) {
     clearInterval(thinkingTimer);
     output.textContent = `Error: ${e.message}`;
