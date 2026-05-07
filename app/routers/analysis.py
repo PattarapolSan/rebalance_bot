@@ -74,6 +74,17 @@ async def list_reports(db: AsyncSession = Depends(get_db)):
     return [{"id": r.id, "date": str(r.report_date), "generated_at": r.generated_at} for r in reports]
 
 
+@router.get("/status")
+async def analysis_status():
+    from app.services.ai_analysis import _last_run, _cost_log
+    total_cost = round(sum(e["cost_usd"] for e in _cost_log), 4)
+    response = {**_analysis_state, "last_run": _last_run,
+                "cost_log": _cost_log[-10:], "total_cost_usd": total_cost}
+    if _analysis_state["message"] == "done":
+        _analysis_state["message"] = "idle"
+    return response
+
+
 @router.get("/{report_date}", response_model=DailyReportResponse)
 async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_db)):
     report = (await db.execute(
@@ -87,18 +98,6 @@ async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_d
     )).scalars().all()
 
     return _build_report_response(report, list(analyses))
-
-
-@router.get("/status")
-async def analysis_status():
-    from app.services.ai_analysis import _last_run, _cost_log
-    total_cost = round(sum(e["cost_usd"] for e in _cost_log), 4)
-    response = {**_analysis_state, "last_run": _last_run,
-                "cost_log": _cost_log[-10:], "total_cost_usd": total_cost}
-    # Clear one-time "done" message after it's been read
-    if _analysis_state["message"] == "done":
-        _analysis_state["message"] = "idle"
-    return response
 
 
 async def _run_with_status():

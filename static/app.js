@@ -637,14 +637,17 @@ function showAnalysisProgress(btn) {
       const s = await api("GET", "/analysis/status");
       if (!s.running) {
         clearInterval(poll);
-        bar.remove();
         if (btn) { btn.disabled = false; btn.innerHTML = "▶ Run Now"; }
-        if (s.message === "done") {
-          toast("Analysis complete!");
-          loadAnalysisHistory();
-        } else {
-          toast(s.message || "Analysis finished", s.message?.startsWith("error"));
-        }
+        const isError = s.message?.startsWith("error");
+        // Show done/error state in bar for 4 seconds before removing
+        bar.className = `flex items-center gap-3 px-4 py-3 mb-4 rounded-xl text-sm font-medium ${
+          isError ? "bg-red-50 border border-red-200 text-red-700"
+                  : "bg-green-50 border border-green-200 text-green-700"}`;
+        bar.innerHTML = isError
+          ? `<span>⚠ ${s.message}</span>`
+          : `<span>✓ Analysis complete — loading results…</span>`;
+        if (!isError) loadAnalysisHistory();
+        setTimeout(() => bar.remove(), 4000);
         return;
       }
       // Cycle through steps while running
