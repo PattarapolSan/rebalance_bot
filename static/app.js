@@ -873,8 +873,9 @@ async function api(method, endpoint, body) {
     body: body ? JSON.stringify(body) : null
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.detail || "API Error");
+    let msg = `HTTP ${res.status}`;
+    try { const d = await res.json(); msg = d.detail || d.error || msg; } catch (_) {}
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -899,13 +900,28 @@ showTab("portfolio");
 // On load: check if analysis is running or just finished (survives page refresh)
 (async () => {
   try {
-    const status = await api("GET", "/analysis/status");
+    const [status, sched] = await Promise.all([
+      api("GET", "/analysis/status"),
+      api("GET", "/analysis/schedule").catch(() => null),
+    ]);
+
+    if (sched) {
+      const h = sched.hour, m = String(sched.minute).padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      const label = `Today ${h12}:${m} ${ampm} (BKK)`;
+      const labelShort = `Today at ${h12}:${m} ${ampm}`;
+      const hEl = document.getElementById("next-analysis-header");
+      const sEl = document.getElementById("next-analysis-sidebar");
+      if (hEl) hEl.textContent = label;
+      if (sEl) sEl.textContent = labelShort;
+    }
+
     if (status.running) {
       showTab("analysis");
       const btn = document.querySelector('[onclick="triggerAnalysis()"]');
       showAnalysisProgress(btn);
     } else if (status.message === "done") {
-      // Analysis finished while user was away — show a brief toast
       toast("Analysis completed — results ready.");
     }
   } catch (_) {}

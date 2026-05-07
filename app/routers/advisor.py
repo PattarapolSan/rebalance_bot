@@ -1,4 +1,6 @@
+import logging
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -33,12 +35,16 @@ async def get_advice(body: AdvisorRequest, db: AsyncSession = Depends(get_db)):
             "company_name": q.get("name", pos.ticker),
         })
 
-    result = await ai_analysis.run_advisor(
-        portfolio=portfolio,
-        budget_usd=body.budget_usd,
-        risk_level=body.risk_level,
-        sector_preference=body.sector_preference,
-        notes=body.notes,
-        stocks_of_interest=body.stocks_of_interest,
-    )
-    return result
+    try:
+        result = await ai_analysis.run_advisor(
+            portfolio=portfolio,
+            budget_usd=body.budget_usd,
+            risk_level=body.risk_level,
+            sector_preference=body.sector_preference,
+            notes=body.notes,
+            stocks_of_interest=body.stocks_of_interest,
+        )
+        return result
+    except Exception as e:
+        logging.error(f"Advisor error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})

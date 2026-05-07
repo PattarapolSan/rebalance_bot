@@ -118,6 +118,16 @@ async def latest_levels(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/schedule")
+async def get_schedule():
+    from app.config import settings
+    return {
+        "hour": settings.analysis_schedule_hour,
+        "minute": settings.analysis_schedule_minute,
+        "timezone": "Asia/Bangkok",
+    }
+
+
 @router.get("/history")
 async def list_reports(db: AsyncSession = Depends(get_db)):
     reports = (await db.execute(
