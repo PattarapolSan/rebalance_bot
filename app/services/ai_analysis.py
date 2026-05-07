@@ -5,7 +5,9 @@ import re
 import anthropic
 from app.config import settings
 
-MODEL = "claude-sonnet-4-6"
+MODEL_SONNET = "claude-sonnet-4-6"
+MODEL_HAIKU  = "claude-haiku-4-5-20251001"
+MODEL = MODEL_SONNET  # default; overridden per-call via argument
 
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search"}
 
@@ -109,7 +111,8 @@ Rules:
 
 
 async def _analyze_one(client, position: dict, prev_levels: dict | None = None,
-                       portfolio_tickers: list[str] | None = None) -> dict | None:
+                       portfolio_tickers: list[str] | None = None,
+                       model: str = MODEL_SONNET) -> dict | None:
     """Analyse a single stock. Returns dict or None on failure."""
     ticker = position.get("ticker", "?").upper()
     prev_line = ""
@@ -132,7 +135,7 @@ async def _analyze_one(client, position: dict, prev_levels: dict | None = None,
     )
     try:
         response = await client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=1500,
             system=[{"type": "text", "text": SINGLE_STOCK_SYSTEM_PROMPT,
                      "cache_control": {"type": "ephemeral"}}],
@@ -178,7 +181,8 @@ async def _analyze_one(client, position: dict, prev_levels: dict | None = None,
 
 async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_done_cb=None,
                            prev_levels_map: dict | None = None,
-                           portfolio_tickers: list[str] | None = None) -> list[dict]:
+                           portfolio_tickers: list[str] | None = None,
+                           model: str = MODEL_SONNET) -> list[dict]:
     """
     Parallel per-stock analysis — one API call per ticker, all running concurrently.
     Scales to any number of stocks, never hits token limits.
@@ -197,7 +201,7 @@ async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_
         async with sem:
             ticker = p.get("ticker", "?").upper()
             prev = (prev_levels_map or {}).get(ticker)
-            result = await _analyze_one(client, p, prev_levels=prev, portfolio_tickers=all_tickers)
+            result = await _analyze_one(client, p, prev_levels=prev, portfolio_tickers=all_tickers, model=model)
         if ticker_done_cb:
             ticker_done_cb(ticker)
         return result
@@ -216,6 +220,45 @@ async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_
     })
     logging.info(f"[daily_report] {len(results)}/{len(positions)} stocks analysed")
     return results
+
+
+async def run_next_run_suggestion(results: list[dict], model: str = MODEL_SONNET) -> dict:
+    """
+    Given today's analysis results, ask Claude when to run next.
+    Returns {"next_run_days": N, "reason": "..."} — costs < $0.01.
+    """
+    client = get_client()
+    lines = []
+    for r in results:
+        parts = [f"- {r.get('ticker','?')}: {r.get('action','?').upper()}"]
+        if r.get("signal"):   parts.append(r["signal"])
+        if r.get("earnings"): parts.append(f"⚠ {r['earnings']}")
+        lines.append(" · ".join(parts))
+
+    summary = "\n".join(lines)
+    prompt = (
+        f"Today's portfolio analysis results:\n{summary}\n\n"
+        "Based on these results (earnings dates, actions, signals), "
+        "when should the next analysis run?\n"
+        "Output ONLY JSON: {\"next_run_days\": N, \"reason\": \"one sentence\"}\n"
+        "next_run_days must be 1–7. Be specific about what drives the timing."
+    )
+    try:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        _record_cost("next_run_suggestion", response.usage)
+        text = "\n".join(b.text for b in response.content if hasattr(b, "text"))
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end != -1:
+            data = json.loads(text[start:end + 1])
+            days = max(1, min(7, int(data.get("next_run_days", 1))))
+            return {"next_run_days": days, "reason": data.get("reason", "")}
+    except Exception as e:
+        logging.error(f"[next_run_suggestion] {e}")
+    return {"next_run_days": 1, "reason": "Default: run tomorrow"}
 
 
 async def run_advisor(

@@ -28,5 +28,7 @@ class DailyReportResponse(BaseModel):
     generated_at: datetime
     portfolio_summary: dict
     analyses: List[StockAnalysisResponse] = []
+    next_run_days: Optional[int] = None
+    next_run_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}

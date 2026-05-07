@@ -80,14 +80,23 @@ async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=N
     from sqlalchemy import select
 
     async with AsyncSessionLocal() as db:
-        # Check if analysis is enabled
+        # Check if analysis is enabled + get model
         from app.models.settings import AppSetting
-        setting = (await db.execute(
+        from app.services.ai_analysis import MODEL_SONNET, MODEL_HAIKU
+        MODEL_MAP = {"sonnet": MODEL_SONNET, "haiku": MODEL_HAIKU}
+
+        enabled_row = (await db.execute(
             select(AppSetting).where(AppSetting.key == "analysis_enabled")
         )).scalar_one_or_none()
-        if setting and setting.value == "false":
+        if enabled_row and enabled_row.value == "false":
             print("[scheduler] Analysis disabled — skipping")
             return
+
+        model_row = (await db.execute(
+            select(AppSetting).where(AppSetting.key == "analysis_model")
+        )).scalar_one_or_none()
+        analysis_model = MODEL_MAP.get(model_row.value if model_row else "sonnet", MODEL_SONNET)
+        print(f"[scheduler] Using model: {analysis_model}")
 
         positions = (await db.execute(select(Position))).scalars().all()
         if not positions:
@@ -151,8 +160,12 @@ async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=N
             positions_data, progress_cb=progress_cb, ticker_done_cb=ticker_done_cb,
             prev_levels_map=prev_levels_map,
             portfolio_tickers=[p["ticker"] for p in positions_data],
+            model=analysis_model,
         )
         rec_map = {r["ticker"]: r for r in recommendations}
+
+        # Ask Claude when to run next based on results
+        next_run = await ai_analysis.run_next_run_suggestion(recommendations, model=analysis_model)
 
         today = date.today()
         existing = (await db.execute(
@@ -175,6 +188,8 @@ async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=N
             report_date=today,
             generated_at=datetime.now(),
             portfolio_summary=json.dumps(portfolio_summary),
+            next_run_days=next_run.get("next_run_days"),
+            next_run_reason=next_run.get("reason"),
         )
         db.add(report)
         await db.flush()

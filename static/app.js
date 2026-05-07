@@ -636,6 +636,23 @@ function renderReport(report) {
     ? `<span class="inline-flex items-center gap-1 text-xs font-semibold text-green-600 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full">✓ AI analysis complete</span>`
     : `<span class="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-full">⚠ AI data unavailable — run again</span>`;
 
+  let nextRunBanner = "";
+  if (report.next_run_days != null && report.next_run_reason) {
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + report.next_run_days);
+    const nextLabel = report.next_run_days === 1 ? "Tomorrow" :
+                      report.next_run_days === 0 ? "Today" :
+                      nextDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    nextRunBanner = `
+    <div class="flex items-center gap-3 rounded-xl px-4 py-3 mb-4 bg-brand-50 border border-brand-100">
+      <span class="text-lg">📅</span>
+      <div>
+        <p class="text-xs font-bold text-brand-600 uppercase tracking-wider">Suggested Next Run</p>
+        <p class="text-sm text-slate-700"><span class="font-semibold">${nextLabel}</span> — ${report.next_run_reason}</p>
+      </div>
+    </div>`;
+  }
+
   content.innerHTML = `
     <div class="mb-4">
       <div class="flex flex-wrap items-center gap-2 mb-1">
@@ -644,6 +661,7 @@ function renderReport(report) {
       </div>
       ${generatedAt ? `<p class="text-xs text-slate-400">Generated ${generatedAt}</p>` : ""}
     </div>
+    ${nextRunBanner}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
       <div class="card p-4 text-center">
         <p class="text-xs text-slate-400 mb-1">Portfolio Value</p>
@@ -680,11 +698,36 @@ function _applyToggleUI(enabled) {
   }
 }
 
+function _applyModelUI(modelKey, costHint) {
+  const sonnetBtn = document.getElementById("model-btn-sonnet");
+  const haikuBtn  = document.getElementById("model-btn-haiku");
+  const hintEl    = document.getElementById("model-cost-hint");
+  if (!sonnetBtn) return;
+  const activeClass   = "bg-brand-500 text-white";
+  const inactiveClass = "bg-white text-slate-500 hover:bg-slate-50";
+  sonnetBtn.className = `px-3 py-1.5 transition-colors ${modelKey === "sonnet" ? activeClass : inactiveClass}`;
+  haikuBtn.className  = `px-3 py-1.5 transition-colors ${modelKey === "haiku"  ? activeClass : inactiveClass}`;
+  if (hintEl) hintEl.textContent = modelKey === "sonnet"
+    ? "Sonnet 4.6 · Best quality · ~$0.80/run"
+    : "Haiku 4.5 · Budget · ~$0.10/run";
+}
+
 async function loadAnalysisToggle() {
   try {
     const s = await api("GET", "/settings");
     _applyToggleUI(s.analysis_enabled);
+    _applyModelUI(s.analysis_model || "sonnet", s.analysis_model_cost_hint);
   } catch (_) {}
+}
+
+async function setModel(modelKey) {
+  try {
+    await api("POST", "/settings/analysis_model", { model: modelKey });
+    _applyModelUI(modelKey);
+    toast(`Model set to ${modelKey === "sonnet" ? "Sonnet 4.6" : "Haiku 4.5"}`);
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 async function toggleAnalysis() {
