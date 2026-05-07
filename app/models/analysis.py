@@ -23,6 +23,10 @@ class StockAnalysis(Base):
     recommendation: Mapped[str] = mapped_column(String(20), nullable=False)  # buy_more | hold | sell
     confidence: Mapped[str] = mapped_column(String(10), default="medium")
     rationale: Mapped[str] = mapped_column(Text, default="")
+    signal: Mapped[str] = mapped_column(Text, nullable=True)
+    news: Mapped[str] = mapped_column(Text, nullable=True)
+    earnings: Mapped[str] = mapped_column(Text, nullable=True)
+    verdict: Mapped[str] = mapped_column(Text, nullable=True)
     support: Mapped[float] = mapped_column(Float, nullable=True)
     resistance: Mapped[float] = mapped_column(Float, nullable=True)
     stop_loss: Mapped[float] = mapped_column(Float, nullable=True)

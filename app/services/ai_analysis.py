@@ -49,14 +49,17 @@ SINGLE_STOCK_SYSTEM_PROMPT = """You are a quantitative equity analyst. Analyse O
 
 Steps:
 1. Search "[TICKER] RSI SMA technical analysis" — get RSI, SMA50, trend direction
-2. Search "[TICKER] stock news" — get recent headlines
+2. Search "[TICKER] stock news earnings" — get recent headlines and upcoming earnings date
 
 Output a single JSON object (nothing else):
 {
   "ticker": "AAPL",
   "action": "buy_more" | "hold" | "sell",
   "confidence": "high" | "medium" | "low",
-  "rationale": "2-4 sentences citing specific RSI/SMA values and news found",
+  "signal": "RSI 65 elevated · price 8% above SMA50 · bullish trend",
+  "news": "One line: key catalyst or risk from search",
+  "earnings": "Q2 earnings Jul 29 · options imply ±6% move",
+  "verdict": "One sentence: why this action",
   "support": 178.50,
   "resistance": 195.00,
   "stop_loss": 172.00,
@@ -65,12 +68,13 @@ Output a single JSON object (nothing else):
 
 Rules:
 - Output ONLY the JSON object — no markdown, no prose
-- Quote actual values from search — never fabricate
-- RSI <30 oversold, RSI >70 overbought; price vs SMA50 = trend
-- Large unrealised gain (>50%) → consider profit-taking
+- signal: RSI value + SMA relationship, max 12 words
+- news: single most important headline or catalyst, max 15 words
+- earnings: upcoming earnings date + implied move if found, null if none soon
+- verdict: one plain-English sentence explaining the action
 - support/resistance from recent highs/lows; stop_loss null if not determinable
-- If action is "sell", set buy_suggestion to a specific ticker (e.g. "VOO") the investor should rotate into instead — search for a better alternative in the same sector or a safer ETF. Otherwise buy_suggestion must be null.
-- If previous support/resistance levels are provided, note if current levels have shifted significantly (mention in rationale)"""
+- If action is "sell", set buy_suggestion to a ticker to rotate into (avoid existing holdings). Otherwise null.
+- If previous support/resistance levels are provided, mention any shift in signal or verdict"""
 
 ADVISOR_SYSTEM_PROMPT = """You are a quantitative portfolio advisor. Output ONLY a single JSON object — no prose, no markdown.
 

@@ -10,6 +10,10 @@ class StockAnalysisResponse(BaseModel):
     recommendation: str
     confidence: str
     rationale: str
+    signal: Optional[str] = None
+    news: Optional[str] = None
+    earnings: Optional[str] = None
+    verdict: Optional[str] = None
     support: Optional[float] = None
     resistance: Optional[float] = None
     stop_loss: Optional[float] = None

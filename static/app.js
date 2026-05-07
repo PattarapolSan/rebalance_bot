@@ -574,6 +574,8 @@ function renderReport(report) {
 
   const analyses = (report.analyses || []).map(a => {
     const hasLevels = a.support != null || a.resistance != null || a.stop_loss != null;
+    // Use structured fields if available, fall back to legacy rationale
+    const hasStructured = a.signal || a.news || a.earnings || a.verdict;
     return `
     <div class="card p-5">
       <div class="flex items-start justify-between mb-3">
@@ -583,15 +585,21 @@ function renderReport(report) {
             ${pill(a.recommendation)}
             ${pill(a.confidence)}
           </div>
-          <p class="text-xs text-slate-400 mt-0.5">${recIcon[a.recommendation] || "⚪"} ${a.recommendation.replace(/_/g, " ").toUpperCase()}</p>
         </div>
         <div class="text-right">
           <p class="text-xl font-bold text-slate-900">$${fmt(a.current_price)}</p>
         </div>
       </div>
-      <p class="text-sm text-slate-600 leading-relaxed border-l-2 border-brand-100 pl-3 mb-3">${a.rationale}</p>
+      ${hasStructured ? `
+      <div class="space-y-2 mb-3">
+        ${a.signal   ? `<div class="flex gap-2 text-sm"><span class="shrink-0">📊</span><span class="text-slate-600">${a.signal}</span></div>` : ""}
+        ${a.news     ? `<div class="flex gap-2 text-sm"><span class="shrink-0">📰</span><span class="text-slate-600">${a.news}</span></div>` : ""}
+        ${a.earnings ? `<div class="flex gap-2 text-sm"><span class="shrink-0">📅</span><span class="text-amber-700 font-medium">${a.earnings}</span></div>` : ""}
+        ${a.verdict  ? `<div class="flex gap-2 text-sm"><span class="shrink-0">💬</span><span class="text-slate-700 font-medium">${a.verdict}</span></div>` : ""}
+      </div>` : `
+      <p class="text-sm text-slate-600 leading-relaxed border-l-2 border-brand-100 pl-3 mb-3">${a.rationale}</p>`}
       ${hasLevels ? `
-      <div class="flex gap-3 flex-wrap pt-3 border-t border-slate-50">
+      <div class="flex gap-2 flex-wrap pt-3 border-t border-slate-50">
         ${a.support != null ? `
         <div class="flex items-center gap-1.5 bg-green-50 rounded-lg px-3 py-1.5">
           <span class="w-2 h-2 rounded-full bg-green-400"></span>
