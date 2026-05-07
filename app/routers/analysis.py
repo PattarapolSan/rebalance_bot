@@ -93,8 +93,12 @@ async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_d
 async def analysis_status():
     from app.services.ai_analysis import _last_run, _cost_log
     total_cost = round(sum(e["cost_usd"] for e in _cost_log), 4)
-    return {**_analysis_state, "last_run": _last_run,
-            "cost_log": _cost_log[-10:], "total_cost_usd": total_cost}
+    response = {**_analysis_state, "last_run": _last_run,
+                "cost_log": _cost_log[-10:], "total_cost_usd": total_cost}
+    # Clear one-time "done" message after it's been read
+    if _analysis_state["message"] == "done":
+        _analysis_state["message"] = "idle"
+    return response
 
 
 async def _run_with_status():

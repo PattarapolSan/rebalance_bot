@@ -477,15 +477,6 @@ async function saveEdit() {
 // ── ANALYSIS ─────────────────────────────────────────────────────────────────
 
 async function loadAnalysisHistory() {
-  // Resume progress bar if analysis was already running before this page load
-  try {
-    const status = await api("GET", "/analysis/status");
-    if (status.running) {
-      const btn = document.querySelector('[onclick="triggerAnalysis()"]');
-      showAnalysisProgress(btn);
-    }
-  } catch (_) {}
-
   try {
     const history = await api("GET", "/analysis/history");
     const sel = document.getElementById("report-date-select");
@@ -817,15 +808,17 @@ function toast(msg, isError = false) {
 // ── Init ─────────────────────────────────────────────────────────────────────
 showTab("portfolio");
 
-// On load: silently check if an analysis is already running (survives page refresh)
+// On load: check if analysis is running or just finished (survives page refresh)
 (async () => {
   try {
     const status = await api("GET", "/analysis/status");
     if (status.running) {
-      // Switch to analysis tab and show progress bar
       showTab("analysis");
       const btn = document.querySelector('[onclick="triggerAnalysis()"]');
       showAnalysisProgress(btn);
+    } else if (status.message === "done") {
+      // Analysis finished while user was away — show a brief toast
+      toast("Analysis completed — results ready.");
     }
   } catch (_) {}
 })();
