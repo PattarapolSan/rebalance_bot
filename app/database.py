@@ -25,7 +25,7 @@ async def init_db():
 
 
 async def _add_key_level_columns(conn):
-    """Add support/resistance/stop_loss columns if they don't exist yet (idempotent)."""
+    """Add support/resistance/stop_loss columns and clean up old NOT NULL columns (idempotent)."""
     from sqlalchemy import text
     if "postgresql" not in settings.async_database_url:
         return
@@ -33,6 +33,18 @@ async def _add_key_level_columns(conn):
         await conn.execute(text(f"""
             DO $$ BEGIN
                 ALTER TABLE stock_analyses ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION;
+            END $$;
+        """))
+    # Drop NOT NULL constraints on old columns that are no longer populated
+    for col in ("news_headlines", "rsi_14", "sma_20", "sma_50", "volume_ratio", "sma_cross"):
+        await conn.execute(text(f"""
+            DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='stock_analyses' AND column_name='{col}'
+                ) THEN
+                    ALTER TABLE stock_analyses ALTER COLUMN {col} DROP NOT NULL;
+                END IF;
             END $$;
         """))
 

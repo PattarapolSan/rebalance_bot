@@ -1,7 +1,9 @@
+import asyncio
 import json
 from datetime import date
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,13 +13,40 @@ from app.schemas.analysis import DailyReportResponse, StockAnalysisResponse
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 
-# Simple in-memory run state
-_analysis_state: dict = {"running": False, "message": "idle"}
+# In-memory state + subscriber queues for SSE push
+_analysis_state: dict = {"running": False, "message": "idle", "tickers": [], "done": []}
+_subscribers: list[asyncio.Queue] = []
 
 
 def _set_state(running: bool, message: str):
     _analysis_state["running"] = running
     _analysis_state["message"] = message
+    _push({**_analysis_state})
+
+
+def _set_tickers(tickers: list[str]):
+    _analysis_state["tickers"] = tickers
+    _analysis_state["done"] = []
+    _push({**_analysis_state})
+
+
+def _ticker_done(ticker: str):
+    if ticker not in _analysis_state["done"]:
+        _analysis_state["done"].append(ticker)
+    _analysis_state["message"] = f"{len(_analysis_state['done'])}/{len(_analysis_state['tickers'])} complete"
+    _push({**_analysis_state})
+
+
+def _push(data: dict):
+    """Push a state update to all connected SSE clients."""
+    dead = []
+    for q in _subscribers:
+        try:
+            q.put_nowait(data)
+        except asyncio.QueueFull:
+            dead.append(q)
+    for q in dead:
+        _subscribers.remove(q)
 
 
 def _build_report_response(report: DailyReport, analyses: list[StockAnalysis]) -> DailyReportResponse:
@@ -85,6 +114,35 @@ async def analysis_status():
     return response
 
 
+@router.get("/stream")
+async def analysis_stream():
+    """SSE endpoint — pushes state updates as analysis progresses."""
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _subscribers.append(q)
+    # Send current state immediately so client knows if already running
+    await q.put({**_analysis_state})
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(q.get(), timeout=25)
+                    yield f"data: {json.dumps(data)}\n\n"
+                    if not data.get("running") and data.get("message") in ("done", "idle"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"  # prevent proxy timeout
+        finally:
+            if q in _subscribers:
+                _subscribers.remove(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/{report_date}", response_model=DailyReportResponse)
 async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_db)):
     report = (await db.execute(
@@ -104,13 +162,11 @@ async def _run_with_status():
     _set_state(True, "Fetching market prices…")
     try:
         from app.services.scheduler import run_daily_analysis
-        # Monkey-patch scheduler to update message at key steps
-        import app.routers.analysis as _self
-        _self._analysis_state["message"] = "Claude is searching the web for each stock…"
-        await run_daily_analysis(force=True)
+        await run_daily_analysis(force=True, progress_cb=_set_state,
+                                 tickers_cb=_set_tickers, ticker_done_cb=_ticker_done)
         _set_state(False, "done")
     except Exception as e:
-        _set_state(False, f"error: {e}")
+        _set_state(False, f"error: {str(e)[:120]}")
 
 
 @router.post("/trigger", status_code=202)

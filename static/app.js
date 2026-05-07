@@ -601,8 +601,12 @@ async function triggerAnalysis() {
   }
 }
 
+let _analysisEventSource = null;
+
 function showAnalysisProgress(btn) {
-  // Show a persistent status bar above the analysis content
+  // Close any existing SSE connection
+  if (_analysisEventSource) { _analysisEventSource.close(); _analysisEventSource = null; }
+
   let bar = document.getElementById("analysis-status-bar");
   if (!bar) {
     bar = document.createElement("div");
@@ -612,34 +616,47 @@ function showAnalysisProgress(btn) {
     content.parentElement.insertBefore(bar, content);
   }
 
-  const steps = [
-    "Fetching market prices…",
-    "Claude is searching the web for each stock…",
-    "Analysing technicals and news…",
-    "Generating recommendations…",
-  ];
-  let stepIdx = 0;
-
-  function updateBar(msg) {
+  function updateBar(s) {
+    bar.className = "px-4 py-3 mb-4 rounded-xl bg-brand-50 border border-brand-200 text-brand-700 text-sm";
+    const tickers = s.tickers || [];
+    const done = new Set(s.done || []);
+    const tickerGrid = tickers.length > 0
+      ? `<div class="flex flex-wrap gap-1.5 mt-2">
+          ${tickers.map(t => done.has(t)
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold">✓ ${t}</span>`
+            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-brand-200 text-slate-400 text-xs font-bold">
+                <svg class="animate-spin w-2.5 h-2.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                ${t}</span>`
+          ).join('')}
+        </div>` : "";
     bar.innerHTML = `
-      <svg class="animate-spin w-4 h-4 shrink-0 text-brand-500" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-      </svg>
-      <span>${msg}</span>`;
+      <div class="flex items-center gap-2 font-medium">
+        <svg class="animate-spin w-4 h-4 shrink-0 text-brand-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        <span>${s.message || "Analysing…"}</span>
+      </div>
+      ${tickerGrid}`;
   }
 
-  updateBar(steps[0]);
+  updateBar({ message: "Connecting…" });
   if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
 
-  const poll = setInterval(async () => {
+  const es = new EventSource(`${API}/analysis/stream`);
+  _analysisEventSource = es;
+
+  es.onmessage = (e) => {
+    if (e.data.startsWith(":")) return; // keepalive
     try {
-      const s = await api("GET", "/analysis/status");
-      if (!s.running) {
-        clearInterval(poll);
+      const s = JSON.parse(e.data);
+      if (s.running) {
+        updateBar(s);
+      } else {
+        es.close();
+        _analysisEventSource = null;
         if (btn) { btn.disabled = false; btn.innerHTML = "▶ Run Now"; }
         const isError = s.message?.startsWith("error");
-        // Show done/error state in bar for 4 seconds before removing
         bar.className = `flex items-center gap-3 px-4 py-3 mb-4 rounded-xl text-sm font-medium ${
           isError ? "bg-red-50 border border-red-200 text-red-700"
                   : "bg-green-50 border border-green-200 text-green-700"}`;
@@ -648,13 +665,16 @@ function showAnalysisProgress(btn) {
           : `<span>✓ Analysis complete — loading results…</span>`;
         if (!isError) loadAnalysisHistory();
         setTimeout(() => bar.remove(), 4000);
-        return;
       }
-      // Cycle through steps while running
-      updateBar(s.message || steps[stepIdx % steps.length]);
-      stepIdx++;
     } catch (_) {}
-  }, 3000);
+  };
+
+  es.onerror = () => {
+    es.close();
+    _analysisEventSource = null;
+    if (bar) bar.remove();
+    if (btn) { btn.disabled = false; btn.innerHTML = "▶ Run Now"; }
+  };
 }
 
 // ── ADVISOR ──────────────────────────────────────────────────────────────────

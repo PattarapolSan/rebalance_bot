@@ -68,7 +68,7 @@ async def _should_skip(db, positions, quotes) -> tuple[bool, str]:
     return True, "portfolio stable — skipping to save cost"
 
 
-async def run_daily_analysis(force: bool = False):
+async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=None, ticker_done_cb=None):
     """
     Scheduled analysis job. Skips if portfolio is stable and ran yesterday,
     unless force=True (e.g. triggered manually from the UI).
@@ -118,7 +118,13 @@ async def run_daily_analysis(force: bool = False):
                 "company_name": q.get("name", pos.ticker),
             })
 
-        recommendations = await ai_analysis.run_daily_report(positions_data)
+        if tickers_cb:
+            tickers_cb([p["ticker"] for p in positions_data])
+        if progress_cb:
+            progress_cb(True, f"Analysing {len(positions_data)} stocks…")
+        recommendations = await ai_analysis.run_daily_report(
+            positions_data, progress_cb=progress_cb, ticker_done_cb=ticker_done_cb
+        )
         rec_map = {r["ticker"]: r for r in recommendations}
 
         today = date.today()

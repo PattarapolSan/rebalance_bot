@@ -146,7 +146,7 @@ async def _analyze_one(client, position: dict) -> dict | None:
         return None
 
 
-async def run_daily_report(positions_data: list[dict]) -> list[dict]:
+async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_done_cb=None) -> list[dict]:
     """
     Parallel per-stock analysis — one API call per ticker, all running concurrently.
     Scales to any number of stocks, never hits token limits.
@@ -156,7 +156,14 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
 
     positions = [{k: v for k, v in p.items() if k != "history_df"} for p in positions_data]
 
-    tasks = [_analyze_one(client, p) for p in positions]
+    async def _tracked(p):
+        result = await _analyze_one(client, p)
+        ticker = p.get("ticker", "?").upper()
+        if ticker_done_cb:
+            ticker_done_cb(ticker)
+        return result
+
+    tasks = [_tracked(p) for p in positions]
     raw_results = await asyncio.gather(*tasks)
 
     results = [r for r in raw_results if r is not None]
