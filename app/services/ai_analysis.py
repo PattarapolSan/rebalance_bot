@@ -12,8 +12,26 @@ WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search"}
 
 _client: anthropic.AsyncAnthropic | None = None
 
-# Debug: store last daily report run info
+# Debug + cost tracking
 _last_run: dict = {"status": "never", "stop_reason": None, "text_preview": "", "error": None}
+_cost_log: list[dict] = []   # last 30 entries
+
+# Sonnet 4.6 pricing (per million tokens, as of 2026)
+_PRICE_IN  = 3.00   # $ per 1M input tokens
+_PRICE_OUT = 15.00  # $ per 1M output tokens
+
+def _record_cost(label: str, usage):
+    """Log token usage and estimated cost from a response.usage object."""
+    if not hasattr(usage, "input_tokens"):
+        return
+    inp = usage.input_tokens or 0
+    out = usage.output_tokens or 0
+    cost = (inp * _PRICE_IN + out * _PRICE_OUT) / 1_000_000
+    entry = {"label": label, "input": inp, "output": out, "cost_usd": round(cost, 5)}
+    _cost_log.append(entry)
+    if len(_cost_log) > 30:
+        _cost_log.pop(0)
+    logging.info(f"[cost] {label}: in={inp} out={out} ~${cost:.4f}")
 
 
 def get_client() -> anthropic.AsyncAnthropic:
@@ -28,36 +46,29 @@ def get_client() -> anthropic.AsyncAnthropic:
     return _client
 
 
-DAILY_SYSTEM_PROMPT = """You are a quantitative equity analyst. Produce grounded, \
-evidence-based recommendations — never fabricate data.
+SINGLE_STOCK_SYSTEM_PROMPT = """You are a quantitative equity analyst. Analyse ONE stock using live web data.
 
-For EACH ticker:
-1. Search "[TICKER] RSI technical analysis" to get current RSI, SMA, trend
-2. Search "[TICKER] stock news" for recent headlines
-3. Include your findings in the rationale — quote actual values retrieved
+Steps:
+1. Search "[TICKER] RSI SMA technical analysis" — get RSI, SMA50, trend direction
+2. Search "[TICKER] stock news" — get recent headlines
 
-Then output a JSON array (and nothing else) in this exact format:
-[
-  {
-    "ticker": "AAPL",
-    "action": "buy_more" | "hold" | "sell",
-    "confidence": "high" | "medium" | "low",
-    "rationale": "2-4 sentences citing specific RSI/SMA values and news",
-    "support": 178.50,
-    "resistance": 195.00,
-    "stop_loss": 172.00
-  },
-  ...
-]
+Output a single JSON object (nothing else):
+{
+  "ticker": "AAPL",
+  "action": "buy_more" | "hold" | "sell",
+  "confidence": "high" | "medium" | "low",
+  "rationale": "2-4 sentences citing specific RSI/SMA values and news found",
+  "support": 178.50,
+  "resistance": 195.00,
+  "stop_loss": 172.00
+}
 
 Rules:
-- Output ONLY the JSON array — no markdown, no prose before or after
-- Include every ticker from the input — no omissions
-- If search returns nothing useful, say so in the rationale; do not fabricate
-- RSI <30 = oversold, RSI >70 = overbought; price vs SMA50 = trend direction
-- Large unrealised gain (>50%) = consider profit-taking
-- support/resistance: key price levels from technicals or recent highs/lows you found
-- stop_loss: suggested exit level to limit downside (null if not determinable)"""
+- Output ONLY the JSON object — no markdown, no prose
+- Quote actual values from search — never fabricate
+- RSI <30 oversold, RSI >70 overbought; price vs SMA50 = trend
+- Large unrealised gain (>50%) → consider profit-taking
+- support/resistance from recent highs/lows; stop_loss null if not determinable"""
 
 ADVISOR_SYSTEM_PROMPT = """You are a quantitative portfolio advisor. \
 Suggest specific investments grounded in real, current data.
@@ -81,74 +92,84 @@ Format:
 Specify exact dollar amounts. No generic disclaimers."""
 
 
-async def run_daily_report(positions_data: list[dict]) -> list[dict]:
-    """
-    Single API call — Claude searches web internally and returns JSON.
-    No tool loop needed: web_search is server-side, JSON is the only output format.
-    """
-    client = get_client()
-
-    payload = [{k: v for k, v in p.items() if k != "history_df"} for p in positions_data]
-
-    user_message = (
-        "Search for technical indicators and recent news for each stock, "
-        "then return your analysis as a JSON array.\n\n"
-        + json.dumps(payload, indent=2)
+async def _analyze_one(client, position: dict) -> dict | None:
+    """Analyse a single stock. Returns dict or None on failure."""
+    ticker = position.get("ticker", "?").upper()
+    user_msg = (
+        f"Analyse {ticker}. Current price: ${position.get('current_price', 0):.2f}, "
+        f"unrealised gain: {position.get('gain_loss_pct', 0):.1f}%.\n"
+        "Search for RSI/SMA and recent news, then output the JSON object."
     )
-
     try:
         response = await client.messages.create(
             model=MODEL,
-            max_tokens=16000,
-            system=[{"type": "text", "text": DAILY_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            max_tokens=1500,
+            system=[{"type": "text", "text": SINGLE_STOCK_SYSTEM_PROMPT,
+                     "cache_control": {"type": "ephemeral"}}],
             tools=[WEB_SEARCH_TOOL],
-            messages=[{"role": "user", "content": user_message}],
+            messages=[{"role": "user", "content": user_msg}],
         )
     except Exception as e:
-        _last_run.update({"status": "api_error", "error": str(e), "stop_reason": None, "text_preview": ""})
-        logging.error(f"Daily report API error: {e}")
-        return []
+        logging.error(f"[{ticker}] API error: {e}")
+        return None
 
-    # Collect all text blocks from the response
-    all_text = "\n".join(
-        block.text for block in response.content if hasattr(block, "text")
-    )
-    block_types = [type(b).__name__ for b in response.content]
-    logging.info(f"[daily_report] stop_reason={response.stop_reason} text_len={len(all_text)} blocks={block_types}")
+    all_text = "\n".join(b.text for b in response.content if hasattr(b, "text"))
+    _record_cost(f"daily/{ticker}", response.usage)
+    logging.info(f"[{ticker}] stop={response.stop_reason} len={len(all_text)}")
 
-    _last_run.update({
-        "stop_reason": response.stop_reason,
-        "text_preview": all_text[:600],
-        "block_types": str(block_types),
-        "error": None,
-    })
+    # Extract JSON object {...}
+    start = all_text.find("{")
+    end = all_text.rfind("}")
+    if start == -1 or end == -1:
+        # Fallback: try array syntax
+        start = all_text.find("[")
+        end = all_text.rfind("]")
+    if start == -1 or end == -1:
+        logging.error(f"[{ticker}] no JSON found: {all_text[:200]}")
+        return None
 
-    # Try to extract a JSON array: look for the first '[' ... last ']'
-    def _extract_json_array(s: str) -> str:
-        if "```" in s:
-            m = re.search(r"```(?:json)?\s*([\s\S]*?)```", s)
-            if m:
-                return m.group(1).strip()
-        start = s.find("[")
-        end = s.rfind("]")
-        if start != -1 and end != -1 and end > start:
-            return s[start:end + 1]
-        return s.strip()
-
-    text = _extract_json_array(all_text)
+    raw = all_text[start:end + 1]
+    # Unwrap single-element array if Claude returned [{...}]
+    if raw.startswith("["):
+        raw = raw.strip()[1:-1].strip()
 
     try:
-        results = json.loads(text)
-        for r in results:
-            r["ticker"] = r.get("ticker", "").upper()
-        _last_run["status"] = f"ok:{len(results)} stocks"
-        logging.info(f"[daily_report] parsed {len(results)} results")
-        return results
+        result = json.loads(raw)
+        # Handle array-of-one
+        if isinstance(result, list):
+            result = result[0] if result else None
+        if result:
+            result["ticker"] = ticker
+        return result
     except json.JSONDecodeError:
-        _last_run["status"] = f"json_parse_failed"
-        _last_run["error"] = f"Extracted: {text[:300]}"
-        logging.error(f"[daily_report] JSON parse failed. text: {text[:500]}")
-        return []
+        logging.error(f"[{ticker}] JSON parse failed: {raw[:200]}")
+        return None
+
+
+async def run_daily_report(positions_data: list[dict]) -> list[dict]:
+    """
+    Parallel per-stock analysis — one API call per ticker, all running concurrently.
+    Scales to any number of stocks, never hits token limits.
+    """
+    import asyncio
+    client = get_client()
+
+    positions = [{k: v for k, v in p.items() if k != "history_df"} for p in positions_data]
+
+    tasks = [_analyze_one(client, p) for p in positions]
+    raw_results = await asyncio.gather(*tasks)
+
+    results = [r for r in raw_results if r is not None]
+    failed = len(positions) - len(results)
+
+    _last_run.update({
+        "status": f"ok:{len(results)} stocks" + (f" ({failed} failed)" if failed else ""),
+        "stop_reason": "parallel",
+        "text_preview": f"{len(results)}/{len(positions)} succeeded",
+        "error": None,
+    })
+    logging.info(f"[daily_report] {len(results)}/{len(positions)} stocks analysed")
+    return results
 
 
 async def run_advisor_stream(
@@ -187,6 +208,8 @@ async def run_advisor_stream(
         ) as stream:
             async for text in stream.text_stream:
                 yield text
+            final = await stream.get_final_message()
+            _record_cost("advisor", final.usage)
     except Exception as e:
         logging.error(f"Advisor stream error: {e}")
         yield f"\n\n[Error: {str(e)}]"

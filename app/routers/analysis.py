@@ -91,8 +91,10 @@ async def get_report_by_date(report_date: date, db: AsyncSession = Depends(get_d
 
 @router.get("/status")
 async def analysis_status():
-    from app.services.ai_analysis import _last_run
-    return {**_analysis_state, "last_run": _last_run}
+    from app.services.ai_analysis import _last_run, _cost_log
+    total_cost = round(sum(e["cost_usd"] for e in _cost_log), 4)
+    return {**_analysis_state, "last_run": _last_run,
+            "cost_log": _cost_log[-10:], "total_cost_usd": total_cost}
 
 
 async def _run_with_status():
