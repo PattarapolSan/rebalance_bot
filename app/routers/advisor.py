@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -34,22 +33,12 @@ async def get_advice(body: AdvisorRequest, db: AsyncSession = Depends(get_db)):
             "company_name": q.get("name", pos.ticker),
         })
 
-    async def event_stream():
-        try:
-            async for chunk in ai_analysis.run_advisor_stream(
-                portfolio=portfolio,
-                budget_usd=body.budget_usd,
-                risk_level=body.risk_level,
-                sector_preference=body.sector_preference,
-                notes=body.notes,
-                stocks_of_interest=body.stocks_of_interest,
-            ):
-                yield f"data: {chunk}\n\n"
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            import logging
-            logging.error(f"Advisor stream error: {e}")
-            yield f"data: Error: {str(e)}\n\n"
-            yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    result = await ai_analysis.run_advisor(
+        portfolio=portfolio,
+        budget_usd=body.budget_usd,
+        risk_level=body.risk_level,
+        sector_preference=body.sector_preference,
+        notes=body.notes,
+        stocks_of_interest=body.stocks_of_interest,
+    )
+    return result

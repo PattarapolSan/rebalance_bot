@@ -2,7 +2,6 @@
 import json
 import logging
 import re
-from typing import AsyncIterator
 import anthropic
 from app.config import settings
 
@@ -73,26 +72,36 @@ Rules:
 - If action is "sell", set buy_suggestion to a specific ticker (e.g. "VOO") the investor should rotate into instead — search for a better alternative in the same sector or a safer ETF. Otherwise buy_suggestion must be null.
 - If previous support/resistance levels are provided, note if current levels have shifted significantly (mention in rationale)"""
 
-ADVISOR_SYSTEM_PROMPT = """You are a quantitative portfolio advisor. \
-Suggest specific investments grounded in real, current data.
+ADVISOR_SYSTEM_PROMPT = """You are a quantitative portfolio advisor. Output ONLY a single JSON object — no prose, no markdown.
+
+Steps:
+1. Review the user's current portfolio for concentration and gaps
+2. Search the web for current price, RSI, SMA, and news for each stock you plan to recommend
+3. If the user listed stocks of interest, search those first
+
+Output format (strict JSON, nothing else):
+{
+  "snapshot": "1-2 sentences on current allocation and key risk",
+  "suggestions": [
+    {
+      "ticker": "AMZN",
+      "allocate_usd": 225,
+      "current_price": 290.50,
+      "rationale": "1-2 sentences with specific data from search",
+      "support": 270.00,
+      "resistance": 310.00,
+      "stop_loss": 255.00
+    }
+  ],
+  "allocation_note": "1 sentence on how budget changes the portfolio balance"
+}
 
 Rules:
-- Search the web for current price, technicals, and news for every stock you recommend
-- Only cite facts you actually retrieved — no invented price targets or earnings
-- Reference the user's actual portfolio — account for existing positions and concentration
-- If the user listed stocks they are interested in, prioritise analysing those first
-
-Risk guidelines:
-- low: Broad ETFs (VTI, VOO, SCHD), dividend blue-chips. Capital preservation.
-- medium: Established large/mid-cap growth, sector ETFs. Balance of yield + growth.
-- high: High-growth small/mid-cap, concentrated bets. Volatility accepted.
-
-Format:
-1. Portfolio snapshot (2-3 sentences on allocation and risk)
-2. 2-4 buy suggestions: ticker, exact $ from budget, 2-sentence rationale with data
-3. One-sentence allocation note
-
-Specify exact dollar amounts. No generic disclaimers."""
+- Output ONLY the JSON — no markdown, no explanation outside it
+- 2-4 suggestions that fit within the budget total
+- support/resistance/stop_loss from recent highs/lows — null if not determinable
+- Never suggest tickers already in the portfolio unless adding more is clearly justified
+- Risk guidelines: low=ETFs/dividend blue-chips, medium=large-cap growth+sector ETFs, high=small/mid-cap growth"""
 
 
 async def _analyze_one(client, position: dict, prev_levels: dict | None = None,
@@ -202,15 +211,15 @@ async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_
     return results
 
 
-async def run_advisor_stream(
+async def run_advisor(
     portfolio: list[dict],
     budget_usd: float,
     risk_level: str,
     sector_preference: str | None,
     notes: str | None,
     stocks_of_interest: list[str] | None,
-) -> AsyncIterator[str]:
-    """Stream advisor response. Web search is server-side — one streaming call."""
+) -> dict:
+    """Call advisor and return parsed JSON dict with suggestions."""
     client = get_client()
 
     interest_line = ""
@@ -225,21 +234,27 @@ async def run_advisor_stream(
         f"- Sector preference: {sector_preference or 'none'}\n"
         f"{interest_line}"
         f"- Notes: {notes or 'none'}\n\n"
-        "Search the web for current data on any stocks you plan to recommend, then advise."
+        "Search the web for current data on stocks you plan to recommend, then output the JSON object."
     )
 
+    response = await client.messages.create(
+        model=MODEL,
+        max_tokens=4096,
+        system=[{"type": "text", "text": ADVISOR_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        tools=[WEB_SEARCH_TOOL],
+        messages=[{"role": "user", "content": user_message}],
+    )
+    _record_cost("advisor", response.usage)
+
+    all_text = "\n".join(b.text for b in response.content if hasattr(b, "text"))
+    start = all_text.find("{")
+    end = all_text.rfind("}")
+    if start == -1 or end == -1:
+        logging.error(f"[advisor] no JSON in response: {all_text[:300]}")
+        return {"error": "No structured response received. Please try again."}
+
     try:
-        async with client.messages.stream(
-            model=MODEL,
-            max_tokens=2048,
-            system=[{"type": "text", "text": ADVISOR_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-            tools=[WEB_SEARCH_TOOL],
-            messages=[{"role": "user", "content": user_message}],
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
-            final = await stream.get_final_message()
-            _record_cost("advisor", final.usage)
-    except Exception as e:
-        logging.error(f"Advisor stream error: {e}")
-        yield f"\n\n[Error: {str(e)}]"
+        return json.loads(all_text[start:end + 1])
+    except json.JSONDecodeError as e:
+        logging.error(f"[advisor] JSON parse error: {e} — {all_text[start:start+300]}")
+        return {"error": "Failed to parse advisor response. Please try again."}

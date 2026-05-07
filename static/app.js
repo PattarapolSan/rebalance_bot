@@ -620,7 +620,7 @@ function renderReport(report) {
   }).join("");
 
   const generatedAt = report.generated_at
-    ? new Date(report.generated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    ? new Date(report.generated_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }) + " (BKK)"
     : null;
 
   const hasRealAnalysis = (report.analyses || []).some(a => a.rationale && a.rationale !== "No analysis available.");
@@ -757,24 +757,16 @@ async function getAdvice() {
   const output = document.getElementById("advisor-output");
   result.classList.remove("hidden");
 
-  const thinkingHTML = `
-    <div id="advisor-thinking" class="flex items-center gap-3 text-slate-500 text-sm">
+  const thinkingMsgs = ["Searching market data…", "Fetching technicals and news…", "Analysing your portfolio…", "Crafting recommendations…"];
+  let msgIdx = 0;
+  output.innerHTML = `
+    <div class="card p-5 flex items-center gap-3 text-slate-500 text-sm">
       <svg class="animate-spin w-4 h-4 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
       </svg>
-      <span id="advisor-thinking-text" class="animate-pulse">Searching market data…</span>
+      <span id="advisor-thinking-text" class="animate-pulse">${thinkingMsgs[0]}</span>
     </div>`;
-  output.innerHTML = thinkingHTML;
-
-  // Cycle thinking messages while waiting for first token
-  const thinkingMsgs = [
-    "Searching market data…",
-    "Fetching technicals and news…",
-    "Analysing your portfolio…",
-    "Crafting recommendations…",
-  ];
-  let msgIdx = 0;
   const thinkingTimer = setInterval(() => {
     msgIdx = (msgIdx + 1) % thinkingMsgs.length;
     const el = document.getElementById("advisor-thinking-text");
@@ -782,59 +774,62 @@ async function getAdvice() {
   }, 3000);
 
   try {
-    const res = await fetch(`${API}/advisor`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ budget_usd: budget, risk_level: risk, sector_preference: sector, notes, stocks_of_interest }),
-    });
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let text = "";
-    let firstToken = true;
-    let renderPending = false;
-
-    function renderMd() {
-      renderPending = false;
-      if (typeof marked !== "undefined") {
-        output.innerHTML = marked.parse(text);
-      } else {
-        output.textContent = text;
-      }
-    }
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      for (const line of chunk.split("\n")) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6);
-          if (data === "[DONE]") break;
-          if (firstToken) {
-            firstToken = false;
-            clearInterval(thinkingTimer);
-            output.innerHTML = "";
-          }
-          text += data;
-          // Debounce rendering to ~4 times/sec
-          if (!renderPending) {
-            renderPending = true;
-            setTimeout(renderMd, 250);
-          }
-        }
-      }
-    }
+    const data = await api("POST", "/advisor", { budget_usd: budget, risk_level: risk, sector_preference: sector, notes, stocks_of_interest });
     clearInterval(thinkingTimer);
-    if (firstToken) {
-      output.textContent = "No response received.";
-    } else {
-      renderMd(); // Final render
-    }
+    renderAdvisorResult(output, data, budget);
   } catch (e) {
     clearInterval(thinkingTimer);
-    output.textContent = `Error: ${e.message}`;
+    output.innerHTML = `<div class="card p-5 text-red-500 text-sm">Error: ${e.message}</div>`;
   }
+}
+
+function renderAdvisorResult(output, data, budget) {
+  if (data.error) {
+    output.innerHTML = `<div class="card p-5 text-red-500 text-sm">${data.error}</div>`;
+    return;
+  }
+
+  const riskLabel = { buy_more: "Buy More", hold: "Hold", sell: "Sell" };
+
+  const cards = (data.suggestions || []).map(s => {
+    const hasLevels = s.support != null || s.resistance != null || s.stop_loss != null;
+    const pct = budget > 0 ? Math.round(s.allocate_usd / budget * 100) : 0;
+    return `
+    <div class="card p-4 border border-slate-100">
+      <div class="flex items-start justify-between mb-2">
+        <div>
+          <span class="text-lg font-bold text-slate-900">${s.ticker}</span>
+          ${s.current_price ? `<span class="ml-2 text-sm text-slate-400">$${fmt(s.current_price)}</span>` : ""}
+        </div>
+        <div class="text-right">
+          <p class="text-lg font-bold text-brand-600">$${fmt(s.allocate_usd)}</p>
+          <p class="text-[10px] text-slate-400">${pct}% of budget</p>
+        </div>
+      </div>
+      <p class="text-sm text-slate-600 leading-relaxed border-l-2 border-brand-100 pl-3 mb-3">${s.rationale}</p>
+      ${hasLevels ? `
+      <div class="flex gap-2 flex-wrap">
+        ${s.support    != null ? `<div class="flex items-center gap-1 bg-green-50 rounded-lg px-2.5 py-1"><span class="text-[10px] text-slate-400">Support</span><span class="text-xs font-bold text-green-700 ml-1">$${fmt(s.support)}</span></div>` : ""}
+        ${s.resistance != null ? `<div class="flex items-center gap-1 bg-red-50 rounded-lg px-2.5 py-1"><span class="text-[10px] text-slate-400">Resistance</span><span class="text-xs font-bold text-red-600 ml-1">$${fmt(s.resistance)}</span></div>` : ""}
+        ${s.stop_loss  != null ? `<div class="flex items-center gap-1 bg-orange-50 rounded-lg px-2.5 py-1"><span class="text-[10px] text-slate-400">Stop Loss</span><span class="text-xs font-bold text-orange-600 ml-1">$${fmt(s.stop_loss)}</span></div>` : ""}
+      </div>` : ""}
+    </div>`;
+  }).join("");
+
+  output.innerHTML = `
+    <div class="space-y-3">
+      ${data.snapshot ? `
+      <div class="card p-4 bg-slate-50 border border-slate-100">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Portfolio Snapshot</p>
+        <p class="text-sm text-slate-700">${data.snapshot}</p>
+      </div>` : ""}
+      ${cards}
+      ${data.allocation_note ? `
+      <div class="card p-4 border border-brand-100 bg-brand-50/30">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">After This Allocation</p>
+        <p class="text-sm text-slate-600">${data.allocation_note}</p>
+      </div>` : ""}
+    </div>`;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
