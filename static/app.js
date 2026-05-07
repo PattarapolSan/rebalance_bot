@@ -204,11 +204,14 @@ function renderPortfolio(positions) {
   const validPositions = positions.filter(p => p.ticker);
   console.log("Valid positions for display:", validPositions.length);
 
-  // Render Desktop Table
-  renderDesktopTable(validPositions, tbody);
-
-  // Render Mobile List
-  renderMobileList(validPositions, mobileList);
+  try { renderDesktopTable(validPositions, tbody); } catch(e) {
+    console.error("Desktop table error:", e);
+    tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-4 text-red-400 text-sm">Render error: ${e.message}</td></tr>`;
+  }
+  try { renderMobileList(validPositions, mobileList); } catch(e) {
+    console.error("Mobile list error:", e);
+    if (mobileList) mobileList.innerHTML = `<div class="p-4 text-red-400 text-sm">Render error: ${e.message}</div>`;
+  }
 
 }
 
@@ -239,6 +242,8 @@ function renderDesktopTable(positions, tbody) {
       </td>
       <td class="px-4 py-4 text-right">
         <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onclick="openSell(${p.id}, '${p.ticker}', ${p.quantity}, ${p.current_price})"\
+            class="px-2.5 py-1 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors" title="Sell">Sell</button>
           <button onclick="openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes || "").replace(/'/g, "\\'")}')"\
             class="p-1.5 hover:bg-brand-50 text-brand-500 rounded-lg transition-colors" title="Edit">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
@@ -300,10 +305,12 @@ function renderMobileList(positions, container) {
             </div>
           </div>
           <div class="flex gap-2 pt-2">
+            <button onclick="event.stopPropagation(); openSell(${p.id}, '${p.ticker}', ${p.quantity}, ${p.current_price})"
+              class="flex-1 py-2 bg-red-50 border border-red-100 text-red-600 font-bold rounded-lg text-xs hover:bg-red-100 transition-colors">Sell</button>
             <button onclick="event.stopPropagation(); openEdit(${p.id}, ${p.quantity}, ${p.entry_price}, '${(p.notes || "").replace(/'/g, "\\'")}')"
               class="flex-1 btn-secondary py-2 text-xs">Edit</button>
             <button onclick="event.stopPropagation(); deletePosition(${p.id})"
-              class="flex-1 border border-red-100 text-red-500 font-bold rounded-lg text-xs hover:bg-red-50 transition-colors">Delete</button>
+              class="flex-1 border border-slate-100 text-slate-400 font-bold rounded-lg text-xs hover:bg-slate-50 transition-colors">Delete</button>
           </div>
         </div>
       </div>
@@ -340,6 +347,55 @@ async function deletePosition(id) {
   if (!confirm("Remove this position from your portfolio?")) return;
   await fetch(`${API}/portfolio/${id}`, { method: "DELETE" });
   loadPortfolio();
+}
+
+// ── SELL ─────────────────────────────────────────────────────────────────────
+
+let _sellPosition = {};
+
+function openSell(id, ticker, qty, price) {
+  _sellPosition = { id, ticker, qty, price };
+  document.getElementById("sell-id").value = id;
+  document.getElementById("sell-qty").value = "";
+  document.getElementById("sell-modal-subtitle").textContent =
+    `${ticker} · You hold ${fmt(qty)} shares @ $${fmt(price)}`;
+  document.getElementById("sell-preview").classList.add("hidden");
+  document.getElementById("sell-modal").classList.remove("hidden");
+
+  // Live preview as user types
+  const input = document.getElementById("sell-qty");
+  input.oninput = () => {
+    const sell = parseFloat(input.value) || 0;
+    const preview = document.getElementById("sell-preview");
+    if (sell <= 0) { preview.classList.add("hidden"); return; }
+    const proceeds = sell * price;
+    const remaining = qty - sell;
+    preview.classList.remove("hidden");
+    if (sell >= qty) {
+      preview.innerHTML = `Selling all shares · Proceeds ≈ <strong>$${fmt(proceeds)}</strong> · Position closed`;
+    } else {
+      preview.innerHTML = `Proceeds ≈ <strong>$${fmt(proceeds)}</strong> · ${fmt(remaining)} shares remain`;
+    }
+  };
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeSellModal() {
+  document.getElementById("sell-modal").classList.add("hidden");
+}
+
+async function confirmSell() {
+  const qty = parseFloat(document.getElementById("sell-qty").value);
+  if (!qty || qty <= 0) return toast("Enter shares to sell.", true);
+  const { id, ticker } = _sellPosition;
+  try {
+    const res = await api("POST", `/portfolio/${id}/sell`, { quantity: qty });
+    closeSellModal();
+    toast(res.deleted ? `${ticker} position closed.` : `Sold ${fmt(qty)} shares of ${ticker}.`);
+    loadPortfolio();
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 function openEdit(id, qty, price, notes) {

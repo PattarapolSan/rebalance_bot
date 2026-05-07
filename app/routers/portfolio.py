@@ -99,6 +99,24 @@ async def update_position(position_id: int, body: PositionUpdate, db: AsyncSessi
     return PositionResponse.model_validate(pos)
 
 
+@router.post("/{position_id}/sell", status_code=200)
+async def sell_position(position_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    pos = await db.get(Position, position_id)
+    if not pos:
+        raise HTTPException(status_code=404, detail="Position not found")
+    sell_qty = float(body.get("quantity", 0))
+    if sell_qty <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive")
+    if sell_qty >= pos.quantity:
+        await db.delete(pos)
+        await db.commit()
+        return {"deleted": True}
+    pos.quantity = round(pos.quantity - sell_qty, 8)
+    await db.commit()
+    await db.refresh(pos)
+    return await update_position_response(pos, db)
+
+
 @router.delete("/{position_id}", status_code=204)
 async def delete_position(position_id: int, db: AsyncSession = Depends(get_db)):
     pos = await db.get(Position, position_id)

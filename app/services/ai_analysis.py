@@ -99,7 +99,7 @@ async def run_daily_report(positions_data: list[dict]) -> list[dict]:
     try:
         response = await client.messages.create(
             model=MODEL,
-            max_tokens=8192,
+            max_tokens=16000,
             system=[{"type": "text", "text": DAILY_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             tools=[WEB_SEARCH_TOOL],
             messages=[{"role": "user", "content": user_message}],
