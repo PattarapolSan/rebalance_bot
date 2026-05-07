@@ -190,11 +190,14 @@ async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_
     positions = [{k: v for k, v in p.items() if k != "history_df"} for p in positions_data]
 
     all_tickers = portfolio_tickers or [p.get("ticker", "").upper() for p in positions]
+    # Limit concurrency to avoid hitting 30K input tokens/min rate limit
+    sem = asyncio.Semaphore(3)
 
     async def _tracked(p):
-        ticker = p.get("ticker", "?").upper()
-        prev = (prev_levels_map or {}).get(ticker)
-        result = await _analyze_one(client, p, prev_levels=prev, portfolio_tickers=all_tickers)
+        async with sem:
+            ticker = p.get("ticker", "?").upper()
+            prev = (prev_levels_map or {}).get(ticker)
+            result = await _analyze_one(client, p, prev_levels=prev, portfolio_tickers=all_tickers)
         if ticker_done_cb:
             ticker_done_cb(ticker)
         return result
