@@ -61,61 +61,110 @@ function switchPortfolioView(view) {
   }
 }
 
-function renderAnalyticsView(positions) {
-  const allocEl = document.getElementById("analytics-allocation");
-  const perfEl = document.getElementById("analytics-performance");
+const CHART_COLORS = [
+  '#6366f1','#8b5cf6','#ec4899','#f43f5e','#f59e0b',
+  '#10b981','#06b6d4','#3b82f6','#84cc16','#f97316',
+];
+let _charts = {};
 
+function _destroyChart(id) {
+  if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+}
+
+function renderAnalyticsView(positions) {
   if (!positions || positions.length === 0) {
-    const empty = '<p class="text-slate-400 text-sm italic py-4">No positions yet — add some from the Portfolio tab.</p>';
-    if (allocEl) allocEl.innerHTML = empty;
-    if (perfEl) perfEl.innerHTML = empty;
+    ['chart-allocation','chart-cost-value','chart-returns'].forEach(id => _destroyChart(id));
     return;
   }
 
-  const totalValue = positions.reduce((s, p) => s + (p.current_value || 0), 0);
+  const tickers = positions.map(p => p.ticker);
+  const colors  = tickers.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
 
-  // ── Allocation table ──
-  if (allocEl) {
-    const sorted = [...positions].sort((a, b) => (b.current_value || 0) - (a.current_value || 0));
-    allocEl.innerHTML = sorted.map(p => {
-      const pct = totalValue > 0 ? (p.current_value / totalValue * 100) : 0;
-      const barW = Math.round(pct);
-      const isGain = (p.gain_loss || 0) >= 0;
-      return `
-        <div class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
-          <span class="w-14 text-xs font-bold text-slate-700 shrink-0">${p.ticker}</span>
-          <div class="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-            <div class="h-2 rounded-full bg-brand-400" style="width:${barW}%"></div>
-          </div>
-          <span class="w-10 text-right text-xs font-semibold text-slate-600 shrink-0">${pct.toFixed(1)}%</span>
-          <span class="w-20 text-right text-xs font-bold shrink-0 ${isGain ? 'text-green-600' : 'text-red-500'}">
-            $${fmt(p.current_value || 0)}
-          </span>
-        </div>`;
-    }).join("");
+  // ── 1. Allocation donut ───────────────────────────────────────────────────
+  _destroyChart('chart-allocation');
+  const allocCtx = document.getElementById('chart-allocation')?.getContext('2d');
+  if (allocCtx) {
+    const totalValue = positions.reduce((s, p) => s + (p.current_value || 0), 0);
+    _charts['chart-allocation'] = new Chart(allocCtx, {
+      type: 'doughnut',
+      data: {
+        labels: tickers,
+        datasets: [{ data: positions.map(p => p.current_value || 0),
+          backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }]
+      },
+      options: {
+        cutout: '65%', maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            label: (item) => ` ${item.label}: $${fmt(item.raw)} (${(item.raw/totalValue*100).toFixed(1)}%)`
+          }}
+        }
+      }
+    });
+    // Legend
+    const legend = document.getElementById('chart-allocation-legend');
+    if (legend) legend.innerHTML = tickers.map((t, i) => `
+      <div class="flex items-center gap-1 text-[10px] font-bold text-slate-600">
+        <span class="w-2 h-2 rounded-full shrink-0" style="background:${colors[i]}"></span>${t}
+      </div>`).join('');
   }
 
-  // ── Top / Bottom performers ──
-  if (perfEl) {
-    const sorted = [...positions].sort((a, b) => (b.gain_loss_pct || 0) - (a.gain_loss_pct || 0));
-    perfEl.innerHTML = sorted.map(p => {
-      const pct = p.gain_loss_pct || 0;
-      const isGain = pct >= 0;
-      const bar = Math.min(Math.abs(pct), 100);
-      return `
-        <div class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
-          <span class="w-14 text-xs font-bold text-slate-700 shrink-0">${p.ticker}</span>
-          <div class="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-            <div class="h-2 rounded-full ${isGain ? 'bg-green-400' : 'bg-red-400'}" style="width:${bar}%"></div>
-          </div>
-          <span class="w-16 text-right text-xs font-bold shrink-0 ${isGain ? 'text-green-600' : 'text-red-500'}">
-            ${isGain ? '+' : ''}${pct.toFixed(2)}%
-          </span>
-          <span class="w-20 text-right text-xs text-slate-400 shrink-0">
-            ${isGain ? '+' : ''}$${fmt(Math.abs(p.gain_loss || 0))}
-          </span>
-        </div>`;
-    }).join("");
+  // ── 2. Cost vs Current Value grouped bar ─────────────────────────────────
+  _destroyChart('chart-cost-value');
+  const cvCtx = document.getElementById('chart-cost-value')?.getContext('2d');
+  if (cvCtx) {
+    _charts['chart-cost-value'] = new Chart(cvCtx, {
+      type: 'bar',
+      data: {
+        labels: tickers,
+        datasets: [
+          { label: 'Cost Basis', data: positions.map(p => p.cost_basis || 0),
+            backgroundColor: 'rgba(148,163,184,0.5)', borderRadius: 4 },
+          { label: 'Current Value', data: positions.map(p => p.current_value || 0),
+            backgroundColor: colors, borderRadius: 4 },
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 10 } },
+          tooltip: { callbacks: { label: (i) => ` ${i.dataset.label}: $${fmt(i.raw)}` }}},
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => '$'+fmt(v), font: { size: 9 } } }
+        }
+      }
+    });
+  }
+
+  // ── 3. Return % bar (sorted best → worst) ────────────────────────────────
+  _destroyChart('chart-returns');
+  const retCtx = document.getElementById('chart-returns')?.getContext('2d');
+  if (retCtx) {
+    const sorted = [...positions].sort((a, b) => (b.gain_loss_pct||0) - (a.gain_loss_pct||0));
+    _charts['chart-returns'] = new Chart(retCtx, {
+      type: 'bar',
+      data: {
+        labels: sorted.map(p => p.ticker),
+        datasets: [{
+          label: 'Return %',
+          data: sorted.map(p => p.gain_loss_pct || 0),
+          backgroundColor: sorted.map(p => (p.gain_loss_pct||0) >= 0
+            ? 'rgba(16,185,129,0.75)' : 'rgba(244,63,94,0.75)'),
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: (i) => ` ${i.raw >= 0 ? '+' : ''}${i.raw.toFixed(2)}%` }}},
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11, weight: 'bold' } } },
+          y: { grid: { color: '#f1f5f9' },
+            ticks: { callback: v => v + '%', font: { size: 9 } } }
+        }
+      }
+    });
   }
 }
 
@@ -428,6 +477,15 @@ async function saveEdit() {
 // ── ANALYSIS ─────────────────────────────────────────────────────────────────
 
 async function loadAnalysisHistory() {
+  // Resume progress bar if analysis was already running before this page load
+  try {
+    const status = await api("GET", "/analysis/status");
+    if (status.running) {
+      const btn = document.querySelector('[onclick="triggerAnalysis()"]');
+      showAnalysisProgress(btn);
+    }
+  } catch (_) {}
+
   try {
     const history = await api("GET", "/analysis/history");
     const sel = document.getElementById("report-date-select");
@@ -758,3 +816,16 @@ function toast(msg, isError = false) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 showTab("portfolio");
+
+// On load: silently check if an analysis is already running (survives page refresh)
+(async () => {
+  try {
+    const status = await api("GET", "/analysis/status");
+    if (status.running) {
+      // Switch to analysis tab and show progress bar
+      showTab("analysis");
+      const btn = document.querySelector('[onclick="triggerAnalysis()"]');
+      showAnalysisProgress(btn);
+    }
+  } catch (_) {}
+})();

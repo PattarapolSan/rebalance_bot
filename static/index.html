@@ -18,6 +18,7 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -368,15 +369,28 @@
 
           <!-- Analytics View -->
           <div id="view-content-analytics" class="hidden space-y-5">
-            <!-- Allocation -->
-            <div class="card p-5 border border-slate-100 shadow-sm">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Portfolio Allocation</h3>
-              <div id="analytics-allocation" class="space-y-1"></div>
+            <!-- Row 1: Donut + Summary -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div class="card p-5 border border-slate-100 shadow-sm">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Allocation</h3>
+                <div class="relative h-48">
+                  <canvas id="chart-allocation"></canvas>
+                </div>
+                <div id="chart-allocation-legend" class="flex flex-wrap gap-1.5 mt-3"></div>
+              </div>
+              <div class="card p-5 border border-slate-100 shadow-sm">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Cost vs Value</h3>
+                <div class="relative h-48">
+                  <canvas id="chart-cost-value"></canvas>
+                </div>
+              </div>
             </div>
-            <!-- Performance -->
+            <!-- Row 2: P&L bar -->
             <div class="card p-5 border border-slate-100 shadow-sm">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Return by Position</h3>
-              <div id="analytics-performance" class="space-y-1"></div>
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Return % by Position</h3>
+              <div class="relative" style="height:200px">
+                <canvas id="chart-returns"></canvas>
+              </div>
             </div>
           </div>
         </div>
