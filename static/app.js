@@ -195,9 +195,14 @@ async function loadPortfolio() {
   const tbody = document.getElementById("portfolio-tbody");
   tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-10 text-center"><div class="skeleton h-4 rounded w-64 mx-auto"></div></td></tr>`;
   try {
-    const positions = await api("GET", "/portfolio");
-    currentPortfolio = positions;
-    renderPortfolio(positions);
+    const [positions, levels] = await Promise.all([
+      api("GET", "/portfolio"),
+      api("GET", "/analysis/latest-levels").catch(() => ({})),
+    ]);
+    // Merge analysis levels into each position
+    const enriched = positions.map(p => ({ ...p, _levels: levels[p.ticker] || null }));
+    currentPortfolio = enriched;
+    renderPortfolio(enriched);
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-10 text-center text-red-400 text-sm">${e.message}</td></tr>`;
   }
@@ -264,17 +269,41 @@ function renderPortfolio(positions) {
 
 }
 
+function _recBadge(rec) {
+  if (!rec) return "";
+  const map = { buy_more: ["bg-green-100 text-green-700", "Buy More"],
+                 hold:     ["bg-yellow-100 text-yellow-700", "Hold"],
+                 sell:     ["bg-red-100 text-red-600", "Sell"] };
+  const [cls, label] = map[rec] || ["bg-slate-100 text-slate-500", rec];
+  return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${cls}">${label}</span>`;
+}
+
+function _levelsBadges(levels) {
+  if (!levels) return "";
+  const parts = [];
+  if (levels.support != null)    parts.push(`<span class="text-[9px] text-slate-400">S <span class="font-semibold text-slate-600">$${fmt(levels.support)}</span></span>`);
+  if (levels.resistance != null) parts.push(`<span class="text-[9px] text-slate-400">R <span class="font-semibold text-slate-600">$${fmt(levels.resistance)}</span></span>`);
+  if (levels.stop_loss != null)  parts.push(`<span class="text-[9px] text-red-400">SL <span class="font-semibold text-red-500">$${fmt(levels.stop_loss)}</span></span>`);
+  return parts.length ? `<div class="flex gap-2 mt-0.5">${parts.join("")}</div>` : "";
+}
+
 function renderDesktopTable(positions, tbody) {
   tbody.innerHTML = positions.map(p => {
     const isGain = (p.gain_loss || 0) >= 0;
     const glBg = isGain ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700";
     const glColor = isGain ? "text-green-600" : "text-red-500";
+    const lvl = p._levels;
+    const buySug = lvl?.buy_suggestion ? `<span class="text-[9px] text-brand-500 font-semibold">→ ${lvl.buy_suggestion}</span>` : "";
 
     return `<tr class="border-t border-slate-50 hover:bg-slate-50/50 transition-colors group">
       <td class="px-5 py-4">
-        <div class="flex flex-col">
-          <span class="font-bold text-slate-900 tracking-tight">${p.ticker}</span>
-          ${p.notes ? `<span class="text-[10px] text-slate-400 font-medium mt-0.5 max-w-[150px] truncate">${p.notes}</span>` : ""}
+        <div class="flex flex-col gap-0.5">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-slate-900 tracking-tight">${p.ticker}</span>
+            ${_recBadge(lvl?.recommendation)}${buySug}
+          </div>
+          ${p.notes ? `<span class="text-[10px] text-slate-400 font-medium max-w-[150px] truncate">${p.notes}</span>` : ""}
+          ${_levelsBadges(lvl)}
         </div>
       </td>
       <td class="px-4 py-4 text-right text-slate-600 font-medium">${fmt(p.quantity)}</td>
@@ -317,6 +346,19 @@ function renderMobileList(positions, container) {
     const isGain = (p.gain_loss || 0) >= 0;
     const glBadge = isGain ? "bg-green-50 text-green-600 border-green-100" : "bg-red-50 text-red-500 border-red-100";
     const glColor = isGain ? "text-green-600" : "text-red-500";
+    const lvl = p._levels;
+    const buySug = lvl?.buy_suggestion ? `<div class="mt-1 text-[10px] text-brand-500 font-semibold">Rotate → ${lvl.buy_suggestion}</div>` : "";
+
+    const levelsSection = lvl && (lvl.support != null || lvl.resistance != null || lvl.stop_loss != null) ? `
+      <div>
+        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Key Levels</p>
+        <div class="flex gap-3">
+          ${lvl.support    != null ? `<div><span class="text-[9px] text-slate-400">Support</span><p class="text-xs font-semibold text-slate-700">$${fmt(lvl.support)}</p></div>` : ""}
+          ${lvl.resistance != null ? `<div><span class="text-[9px] text-slate-400">Resistance</span><p class="text-xs font-semibold text-slate-700">$${fmt(lvl.resistance)}</p></div>` : ""}
+          ${lvl.stop_loss  != null ? `<div><span class="text-[9px] text-slate-400">Stop Loss</span><p class="text-xs font-semibold text-red-500">$${fmt(lvl.stop_loss)}</p></div>` : ""}
+        </div>
+        ${buySug}
+      </div>` : "";
 
     return `
       <div class="card p-4 border border-slate-100 shadow-sm active:shadow-md transition-all sm:hover:border-brand-200" onclick="toggleDetails(${p.id})">
@@ -324,6 +366,7 @@ function renderMobileList(positions, container) {
           <div class="flex items-center gap-2">
             <span class="font-bold text-slate-900 text-lg group-hover:text-brand-600 transition-colors">${p.ticker}</span>
             <span class="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded tracking-tighter">${fmt(p.quantity)} Shares</span>
+            ${_recBadge(lvl?.recommendation)}
           </div>
           <div class="flex flex-col items-end">
             <span class="font-bold text-slate-900">$${fmt(p.current_price)}</span>
@@ -332,7 +375,7 @@ function renderMobileList(positions, container) {
             </div>
           </div>
         </div>
-        
+
         <!-- Expandable details -->
         <div id="details-${p.id}" class="hidden mt-4 pt-4 border-t border-slate-50 space-y-3">
           <div class="grid grid-cols-2 gap-4">
@@ -353,6 +396,7 @@ function renderMobileList(positions, container) {
               <p class="text-xs text-slate-500">${p.notes || "—"}</p>
             </div>
           </div>
+          ${levelsSection}
           <div class="flex gap-2 pt-2">
             <button onclick="event.stopPropagation(); openSell(${p.id}, '${p.ticker}', ${p.quantity}, ${p.current_price})"
               class="flex-1 py-2 bg-red-50 border border-red-100 text-red-600 font-bold rounded-lg text-xs hover:bg-red-100 transition-colors">Sell</button>
@@ -553,6 +597,11 @@ function renderReport(report) {
           <span class="text-xs text-slate-500">Stop Loss</span>
           <span class="text-xs font-bold text-orange-600">$${fmt(a.stop_loss)}</span>
         </div>` : ""}
+      </div>` : ""}
+      ${a.recommendation === "sell" && a.buy_suggestion ? `
+      <div class="mt-3 flex items-center gap-2 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
+        <span class="text-xs text-slate-500">Consider rotating into</span>
+        <span class="text-sm font-bold text-brand-600">${a.buy_suggestion}</span>
       </div>` : ""}
     </div>`;
   }).join("");

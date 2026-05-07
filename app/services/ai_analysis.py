@@ -60,7 +60,8 @@ Output a single JSON object (nothing else):
   "rationale": "2-4 sentences citing specific RSI/SMA values and news found",
   "support": 178.50,
   "resistance": 195.00,
-  "stop_loss": 172.00
+  "stop_loss": 172.00,
+  "buy_suggestion": null
 }
 
 Rules:
@@ -68,7 +69,9 @@ Rules:
 - Quote actual values from search — never fabricate
 - RSI <30 oversold, RSI >70 overbought; price vs SMA50 = trend
 - Large unrealised gain (>50%) → consider profit-taking
-- support/resistance from recent highs/lows; stop_loss null if not determinable"""
+- support/resistance from recent highs/lows; stop_loss null if not determinable
+- If action is "sell", set buy_suggestion to a specific ticker (e.g. "VOO") the investor should rotate into instead — search for a better alternative in the same sector or a safer ETF. Otherwise buy_suggestion must be null.
+- If previous support/resistance levels are provided, note if current levels have shifted significantly (mention in rationale)"""
 
 ADVISOR_SYSTEM_PROMPT = """You are a quantitative portfolio advisor. \
 Suggest specific investments grounded in real, current data.
@@ -92,12 +95,26 @@ Format:
 Specify exact dollar amounts. No generic disclaimers."""
 
 
-async def _analyze_one(client, position: dict) -> dict | None:
+async def _analyze_one(client, position: dict, prev_levels: dict | None = None,
+                       portfolio_tickers: list[str] | None = None) -> dict | None:
     """Analyse a single stock. Returns dict or None on failure."""
     ticker = position.get("ticker", "?").upper()
+    prev_line = ""
+    if prev_levels:
+        parts = []
+        if prev_levels.get("support") is not None:
+            parts.append(f"Support ${prev_levels['support']:.2f}")
+        if prev_levels.get("resistance") is not None:
+            parts.append(f"Resistance ${prev_levels['resistance']:.2f}")
+        if prev_levels.get("stop_loss") is not None:
+            parts.append(f"Stop Loss ${prev_levels['stop_loss']:.2f}")
+        if parts:
+            prev_line = f"\nPrevious analysis levels: {', '.join(parts)}. Note if these levels have changed."
+    others = [t for t in (portfolio_tickers or []) if t != ticker]
+    portfolio_line = f"\nExisting portfolio (already held): {', '.join(others)}. If recommending a buy_suggestion, avoid these tickers unless adding more is clearly justified — prefer something that diversifies." if others else ""
     user_msg = (
         f"Analyse {ticker}. Current price: ${position.get('current_price', 0):.2f}, "
-        f"unrealised gain: {position.get('gain_loss_pct', 0):.1f}%.\n"
+        f"unrealised gain: {position.get('gain_loss_pct', 0):.1f}%.{prev_line}{portfolio_line}\n"
         "Search for RSI/SMA and recent news, then output the JSON object."
     )
     try:
@@ -146,19 +163,25 @@ async def _analyze_one(client, position: dict) -> dict | None:
         return None
 
 
-async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_done_cb=None) -> list[dict]:
+async def run_daily_report(positions_data: list[dict], progress_cb=None, ticker_done_cb=None,
+                           prev_levels_map: dict | None = None,
+                           portfolio_tickers: list[str] | None = None) -> list[dict]:
     """
     Parallel per-stock analysis — one API call per ticker, all running concurrently.
     Scales to any number of stocks, never hits token limits.
+    prev_levels_map: {ticker: {support, resistance, stop_loss}} from last report.
     """
     import asyncio
     client = get_client()
 
     positions = [{k: v for k, v in p.items() if k != "history_df"} for p in positions_data]
 
+    all_tickers = portfolio_tickers or [p.get("ticker", "").upper() for p in positions]
+
     async def _tracked(p):
-        result = await _analyze_one(client, p)
         ticker = p.get("ticker", "?").upper()
+        prev = (prev_levels_map or {}).get(ticker)
+        result = await _analyze_one(client, p, prev_levels=prev, portfolio_tickers=all_tickers)
         if ticker_done_cb:
             ticker_done_cb(ticker)
         return result

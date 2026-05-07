@@ -13,6 +13,7 @@ class StockAnalysisResponse(BaseModel):
     support: Optional[float] = None
     resistance: Optional[float] = None
     stop_loss: Optional[float] = None
+    buy_suggestion: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

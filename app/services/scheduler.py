@@ -122,8 +122,26 @@ async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=N
             tickers_cb([p["ticker"] for p in positions_data])
         if progress_cb:
             progress_cb(True, f"Analysing {len(positions_data)} stocks…")
+
+        # Fetch previous analysis levels to give Claude historical context
+        prev_report = (await db.execute(
+            select(DailyReport).order_by(DailyReport.report_date.desc()).limit(1)
+        )).scalar_one_or_none()
+        prev_levels_map: dict = {}
+        if prev_report:
+            prev_analyses = (await db.execute(
+                select(StockAnalysis).where(StockAnalysis.report_id == prev_report.id)
+            )).scalars().all()
+            prev_levels_map = {
+                a.ticker: {"support": a.support, "resistance": a.resistance, "stop_loss": a.stop_loss}
+                for a in prev_analyses
+                if a.support is not None or a.resistance is not None
+            }
+
         recommendations = await ai_analysis.run_daily_report(
-            positions_data, progress_cb=progress_cb, ticker_done_cb=ticker_done_cb
+            positions_data, progress_cb=progress_cb, ticker_done_cb=ticker_done_cb,
+            prev_levels_map=prev_levels_map,
+            portfolio_tickers=[p["ticker"] for p in positions_data],
         )
         rec_map = {r["ticker"]: r for r in recommendations}
 
@@ -167,6 +185,7 @@ async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=N
                 support=rec.get("support"),
                 resistance=rec.get("resistance"),
                 stop_loss=rec.get("stop_loss"),
+                buy_suggestion=rec.get("buy_suggestion"),
             ))
 
         await db.commit()

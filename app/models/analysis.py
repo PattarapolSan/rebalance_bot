@@ -26,3 +26,4 @@ class StockAnalysis(Base):
     support: Mapped[float] = mapped_column(Float, nullable=True)
     resistance: Mapped[float] = mapped_column(Float, nullable=True)
     stop_loss: Mapped[float] = mapped_column(Float, nullable=True)
+    buy_suggestion: Mapped[str] = mapped_column(String(20), nullable=True)

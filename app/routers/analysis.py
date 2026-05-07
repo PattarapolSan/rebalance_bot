@@ -94,6 +94,30 @@ async def get_latest_report(db: AsyncSession = Depends(get_db)):
     return _build_report_response(report, list(analyses))
 
 
+@router.get("/latest-levels")
+async def latest_levels(db: AsyncSession = Depends(get_db)):
+    """Return the most recent support/resistance/stop_loss + recommendation for each ticker."""
+    report = (await db.execute(
+        select(DailyReport).order_by(DailyReport.report_date.desc()).limit(1)
+    )).scalar_one_or_none()
+    if not report:
+        return {}
+    analyses = (await db.execute(
+        select(StockAnalysis).where(StockAnalysis.report_id == report.id)
+    )).scalars().all()
+    return {
+        a.ticker: {
+            "recommendation": a.recommendation,
+            "confidence": a.confidence,
+            "support": a.support,
+            "resistance": a.resistance,
+            "stop_loss": a.stop_loss,
+            "buy_suggestion": getattr(a, "buy_suggestion", None),
+        }
+        for a in analyses
+    }
+
+
 @router.get("/history")
 async def list_reports(db: AsyncSession = Depends(get_db)):
     reports = (await db.execute(

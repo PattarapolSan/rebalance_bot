@@ -35,6 +35,11 @@ async def _add_key_level_columns(conn):
                 ALTER TABLE stock_analyses ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION;
             END $$;
         """))
+    await conn.execute(text("""
+        DO $$ BEGIN
+            ALTER TABLE stock_analyses ADD COLUMN IF NOT EXISTS buy_suggestion VARCHAR(20);
+        END $$;
+    """))
     # Drop NOT NULL constraints on old columns that are no longer populated
     for col in ("news_headlines", "rsi_14", "sma_20", "sma_50", "volume_ratio", "sma_cross"):
         await conn.execute(text(f"""
