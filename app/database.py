@@ -18,7 +18,7 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     async with engine.begin() as conn:
-        from app.models import portfolio, analysis  # noqa: F401
+        from app.models import portfolio, analysis, settings  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
         await _fix_fk_cascade(conn)
         await _add_key_level_columns(conn)

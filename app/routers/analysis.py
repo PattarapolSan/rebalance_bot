@@ -204,7 +204,13 @@ async def _run_with_status():
 
 
 @router.post("/trigger", status_code=202)
-async def trigger_analysis(background_tasks: BackgroundTasks):
+async def trigger_analysis(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    from app.models.settings import AppSetting
+    setting = (await db.execute(
+        select(AppSetting).where(AppSetting.key == "analysis_enabled")
+    )).scalar_one_or_none()
+    if setting and setting.value == "false":
+        return {"message": "Analysis is disabled", "disabled": True}
     if _analysis_state["running"]:
         return {"message": "Analysis already running"}
     _set_state(True, "Starting…")

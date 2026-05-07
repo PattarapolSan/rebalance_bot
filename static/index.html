@@ -397,13 +397,24 @@
 
         <!-- ANALYSIS TAB -->
         <div id="tab-content-analysis" class="hidden">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <h1 class="text-2xl font-bold text-slate-900">Daily Analysis</h1>
             <div class="flex gap-2 items-center">
               <select id="report-date-select" onchange="loadReport(this.value)"
                 class="input w-auto text-sm py-2 bg-white"></select>
-              <button onclick="triggerAnalysis()" class="btn-primary whitespace-nowrap">▶ Run Now</button>
+              <button id="run-now-btn" onclick="triggerAnalysis()" class="btn-primary whitespace-nowrap">▶ Run Now</button>
             </div>
+          </div>
+          <!-- Analysis enable/disable toggle -->
+          <div id="analysis-toggle-bar" class="flex items-center justify-between rounded-xl px-4 py-3 mb-5 bg-slate-50 border border-slate-100">
+            <div>
+              <p class="text-sm font-semibold text-slate-700">AI Analysis</p>
+              <p id="analysis-toggle-hint" class="text-xs text-slate-400">Scheduled + manual analysis enabled</p>
+            </div>
+            <button id="analysis-toggle-btn" onclick="toggleAnalysis()"
+              class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none">
+              <span id="analysis-toggle-dot" class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"></span>
+            </button>
           </div>
           <div id="analysis-content">
             <div class="card p-12 text-center text-slate-400">

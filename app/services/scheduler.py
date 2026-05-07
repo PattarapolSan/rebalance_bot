@@ -80,6 +80,15 @@ async def run_daily_analysis(force: bool = False, progress_cb=None, tickers_cb=N
     from sqlalchemy import select
 
     async with AsyncSessionLocal() as db:
+        # Check if analysis is enabled
+        from app.models.settings import AppSetting
+        setting = (await db.execute(
+            select(AppSetting).where(AppSetting.key == "analysis_enabled")
+        )).scalar_one_or_none()
+        if setting and setting.value == "false":
+            print("[scheduler] Analysis disabled — skipping")
+            return
+
         positions = (await db.execute(select(Position))).scalars().all()
         if not positions:
             return

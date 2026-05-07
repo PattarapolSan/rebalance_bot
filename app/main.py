@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 
 from app.database import init_db
 from app.services.scheduler import start_scheduler, stop_scheduler
-from app.routers import portfolio, analysis, advisor
+from app.routers import portfolio, analysis, advisor, settings
 
 
 @asynccontextmanager
@@ -21,6 +21,7 @@ app = FastAPI(title="Rebalance Bot", lifespan=lifespan)
 app.include_router(portfolio.router)
 app.include_router(analysis.router)
 app.include_router(advisor.router)
+app.include_router(settings.router)
 
 
 @app.get("/api/v1/health")

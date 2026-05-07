@@ -31,7 +31,7 @@ function showTab(name) {
   active.classList.remove("text-slate-500", "hover:bg-slate-50", "hover:text-slate-700");
 
   if (name === "portfolio") loadPortfolio();
-  if (name === "analysis") loadAnalysisHistory();
+  if (name === "analysis") { loadAnalysisHistory(); loadAnalysisToggle(); }
 
   // Auto-close sidebar on mobile after selection
   if (window.innerWidth < 768) {
@@ -659,6 +659,44 @@ function renderReport(report) {
       </div>
     </div>
     <div class="space-y-4">${analyses || '<div class="card p-10 text-center text-slate-400">No stock analyses in this report.</div>'}</div>`;
+}
+
+function _applyToggleUI(enabled) {
+  const btn = document.getElementById("analysis-toggle-btn");
+  const dot = document.getElementById("analysis-toggle-dot");
+  const hint = document.getElementById("analysis-toggle-hint");
+  const runBtn = document.getElementById("run-now-btn");
+  if (!btn) return;
+  if (enabled) {
+    btn.className = "relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-brand-500";
+    dot.className = "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform translate-x-6";
+    hint.textContent = "Scheduled + manual analysis enabled";
+    if (runBtn) { runBtn.disabled = false; runBtn.classList.remove("opacity-40", "cursor-not-allowed"); }
+  } else {
+    btn.className = "relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-slate-300";
+    dot.className = "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform translate-x-1";
+    hint.textContent = "Analysis paused — re-enable when credits renew";
+    if (runBtn) { runBtn.disabled = true; runBtn.classList.add("opacity-40", "cursor-not-allowed"); }
+  }
+}
+
+async function loadAnalysisToggle() {
+  try {
+    const s = await api("GET", "/settings");
+    _applyToggleUI(s.analysis_enabled);
+  } catch (_) {}
+}
+
+async function toggleAnalysis() {
+  try {
+    const s = await api("GET", "/settings");
+    const newVal = !s.analysis_enabled;
+    await api("POST", "/settings/analysis_enabled", { enabled: newVal });
+    _applyToggleUI(newVal);
+    toast(newVal ? "Analysis enabled" : "Analysis paused");
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 async function triggerAnalysis() {
