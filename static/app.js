@@ -349,6 +349,18 @@ function renderMobileList(positions, container) {
     const lvl = p._levels;
     const buySug = lvl?.buy_suggestion ? `<div class="mt-1 text-[10px] text-brand-500 font-semibold">Rotate → ${lvl.buy_suggestion}</div>` : "";
 
+    // "X% to resistance" quick reference
+    let toResistance = "";
+    if (lvl?.resistance != null && p.current_price) {
+      const gap = lvl.resistance - p.current_price;
+      const gapPct = (gap / p.current_price * 100);
+      if (gap > 0) {
+        toResistance = `<span class="text-[9px] text-slate-400 font-medium">+${gapPct.toFixed(1)}% to R</span>`;
+      } else {
+        toResistance = `<span class="text-[9px] text-orange-400 font-semibold">Above R</span>`;
+      }
+    }
+
     const levelsSection = lvl && (lvl.support != null || lvl.resistance != null || lvl.stop_loss != null) ? `
       <div>
         <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Key Levels</p>
@@ -373,6 +385,7 @@ function renderMobileList(positions, container) {
             <div class="mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${glBadge}">
               ${isGain ? "▲" : "▼"} ${fmtPct(p.gain_loss_pct)}
             </div>
+            ${toResistance ? `<div class="mt-0.5">${toResistance}</div>` : ""}
           </div>
         </div>
 
